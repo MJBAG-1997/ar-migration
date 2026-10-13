@@ -1,0 +1,13 @@
+# Data files — contain client data, never commit
+*.xlsx
+*.json
+*.log
+~$*
+
+# Snapshot directories
+snapshot_*/
+
+# Other project data directories
+cwm-sr/
+block5_provider_profile.json
+block6_destination.json
