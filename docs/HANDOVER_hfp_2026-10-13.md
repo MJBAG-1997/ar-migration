@@ -53,6 +53,11 @@
 | Income & Employment rows | 316 |
 | Expenses rows | 2,381 |
 | Circles | 92 |
+| Dependants (unique persons) | 250 |
+| Relationships (unique pairs) | 190 |
+| Premiums | 173 |
+
+**Dependants note:** 249 unique dependants in the 2026-10-12 snapshot. 1 additional found only via the live `/api/v2/dependants` download (UUID `89a694c4-4ad7-4ff3-98de-eaffdaef9688`; parent accounts `34aed1c8`, `ff64f4f4`, `0e3a8af6`). Total importer rows: 250. The figure 367 = total account-dependant links (each dependant counted once per linked parent account); it is not a unique count. 250 is not a per-page cap — the API returns up to 250 per page; use `filter[uuid]` with `include=accounts` and follow `next` pagination links to retrieve beyond 250.
 
 ### Indicative annual income by charge group
 
@@ -116,9 +121,10 @@ Note: snapshot contains 332 active ongoing charges vs 330 counted in v2 build. T
 ## Not yet done
 
 - **Review pack not sent.** `hfp_review_pack_v2.xlsx` is built but not yet emailed to Jim Hoban. Return date not filled in on the Read me tab.
+- **AR importer files (v2) built 2026-10-14.** 10 separate .xlsx files plus `hfp_Data_Analysis_v2.docx` in DATA_ROOT. Awaiting AR sign-off (charges Section C rates, provider-not-in-Plannr decisions, notes choice).
 - **Block 4 (validate) not run.** No validation pass against the BA destination environment.
 - **ZZ test not run.** No test import to BA staging.
-- **No destination writes made.** This session was snapshot-only; nothing has been written to the BA system.
+- **No destination writes made.** All sessions snapshot/export-only; nothing written to the BA system.
 - **Tags not processed.** Tag mapping not applied.
 
 ---
