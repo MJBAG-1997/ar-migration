@@ -353,11 +353,11 @@ def pre_check_2():
     results["Provider_plans_not_in_Plannr"] = n_prov
     p(f"  Provider plans: {n_prov} changed cells")
 
-    # Charges — row-order comparison (all 675 rows)
+    # Charges — match by external_reference_value (returned workbook may be reordered)
     sh_ch, sr_ch = load_xlsx_rows(SENT_CHARGES_XLSX, "Charges")
-    _, rr_ch = load_xlsx_rows(RETURNED_CHARGES, "Charges")
+    _, rr_ch     = load_xlsx_rows(RETURNED_CHARGES, "Charges")
     cc_ch = comp_cols_for(sh_ch)
-    n_ch = changed_cells(sr_ch, rr_ch, cc_ch, id_col=None)
+    n_ch = changed_cells(sr_ch, rr_ch, cc_ch, id_col="external_reference_value")
     results["Charges"] = n_ch
     p(f"  Charges: {n_ch} changed cells")
 
@@ -418,7 +418,7 @@ def build_clients(cl_26):
     p("\n── Building W1/W2 clients ────────────────────────────────────────────────")
     deleted_uuids, adviser_overrides = load_review_overrides()
 
-    w1, w2 = [], []
+    w1, w2, manual_phones = [], [], []
     for row in cl_26:
         uid = str(row.get("uuid", "") or "").strip()
         if not uid or uid in deleted_uuids:
@@ -434,16 +434,19 @@ def build_clients(cl_26):
         out["external_reference_value"] = uid
 
         # archived_reason required when status is ARCHIVED/DECEASED/INACTIVE at dest
-        ARCHIVED_DEST = "e631424e-56fc-4fa6-81a1-ddd029659bba"
+        ARCHIVED_DEST  = "e631424e-56fc-4fa6-81a1-ddd029659bba"
+        SRC_DECEASED   = "1684bd3d-c040-4d93-96b9-90a8d63f0280"
         if dest_status == ARCHIVED_DEST and not out.get("archived_reason"):
-            out["archived_reason"] = "Left firm - Firm decision"
+            src_status = str(row.get("status_uuid", "") or "").strip()
+            out["archived_reason"] = "Deceased" if src_status == SRC_DECEASED else "Left firm - Firm decision"
 
         # Strip spurious quote-wrappers from phone (e.g. '"+447889725956"' → '+447889725956')
         ph = out.get("phone", "")
         if ph.startswith('"') and ph.endswith('"'):
             ph = ph[1:-1]
-        # Plannr only accepts UK E.164 numbers; blank non-+44 phones to avoid validation errors
+        # Plannr rejects non-+44 numbers; blank them and record for manual entry after import
         if ph and not ph.startswith("+44"):
+            manual_phones.append({"external_reference_value": uid, "phone": ph})
             ph = ""
         out["phone"] = ph
 
@@ -460,8 +463,10 @@ def build_clients(cl_26):
         t = str(row.get("type", "") or "").lower()
         (w1 if t == "individual" else w2).append(out)
 
+    if manual_phones:
+        p(f"  Manual phones (non-+44, blanked): {len(manual_phones)}")
     p(f"  W1 individual: {len(w1)}, W2 non-individual: {len(w2)}")
-    return w1, w2
+    return w1, w2, manual_phones
 
 
 # ─── Build W2 circles ────────────────────────────────────────────────────────
@@ -862,11 +867,14 @@ def build_valuations(pl_26):
             "valuation_date": val_date,
             "value": f"{pounds:.2f}",
         }
+        if pounds == 0.0 and not val_date:
+            zero_blank.append({"plan_uuid": plan_uid, "value": f"{pounds:.2f}", "valuation_date": val_date})
+            continue  # no valuation data at all — skip
         out.append(row)
         if pounds == 0.0 or not val_date:
             zero_blank.append({"plan_uuid": plan_uid, "value": f"{pounds:.2f}", "valuation_date": val_date})
 
-    p(f"  W6 valuations: {len(out)} ({len(zero_blank)} at zero or no date)")
+    p(f"  W6 valuations: {len(out)} ({len(zero_blank)} at zero or no date; {sum(1 for z in zero_blank if z['value']=='0.00' and not z['valuation_date'])} zero+no-date skipped)")
     return out, zero_blank
 
 
@@ -901,30 +909,44 @@ def build_charges():
             if pid:
                 rate_needed_plans.add(pid)
 
-    # Section A/B rows from export (skip Rate-needed plan_uuids)
+    # Build ext-ref → returned row lookup (returned workbook may be in different order)
+    ret_by_extref = {}
+    for rr in ret_ch:
+        ext = str(rr.get("external_reference_value", "") or "").strip()
+        if ext:
+            ret_by_extref[ext] = rr
+
+    # Rate-needed charge ext-refs (to exclude their export rows when they exist in source)
+    rate_needed_ext_refs = {
+        str(r.get("external_reference_value", "") or "").strip()
+        for r in sent_ch
+        if str(r.get("basis", "") or "").strip() == "Rate needed"
+        and str(r.get("external_reference_value", "") or "").strip()
+    }
+
+    # Section A/B rows from export (skip ONLY charges whose own ext-ref is Rate-needed)
     sec_ab = []
     for r in ch_26:
-        pid = str(r.get("plan_uuid", "") or "").strip()
-        if pid in rate_needed_plans:
-            continue
+        ext = str(r.get("external_reference_value", "") or "").strip()
+        if ext and ext in rate_needed_ext_refs:
+            continue  # this specific charge is Rate-needed; sec C will cover it
         out = {k: str(r.get(k, "") or "").strip() for k in CHARGE_KEYS}
         out["uuid"] = ""
         out["adviser_uuid"] = map_adviser(r.get("adviser_uuid", ""))
-        # Protection plans → type=Commission (D15)
         if "protection" in str(r.get("plan_type", "") or "").lower():
             out["type"] = "Commission"
-        # client_uuid: export has client_uuids (pipe-separated); take first
         cl_uids = str(r.get("client_uuids", "") or "").replace("|", ",")
         out["client_uuid"] = cl_uids.split(",")[0].strip()
         sec_ab.append(out)
 
-    # Section C: Rate-needed rows
+    # Section C: Rate-needed rows — match returned by external_reference_value
     rate_filled, rate_blank, high_rates = [], [], []
     sec_c = []
-    for i, sr in enumerate(sent_ch):
+    for sr in sent_ch:
         if str(sr.get("basis", "") or "").strip() != "Rate needed":
             continue
-        rr = ret_ch[i] if i < len(ret_ch) else {}
+        ext_ref = str(sr.get("external_reference_value", "") or "").strip()
+        rr = ret_by_extref.get(ext_ref, {})
         pct_raw = str(rr.get("percentage", "") or "").strip()
         plan_uid   = str(sr.get("plan_uuid", "") or "").strip()
         cl_uid     = str(sr.get("client_uuid", "") or "").strip()
@@ -1000,20 +1022,30 @@ def build_notes():
     p("\n── Building W8 notes ─────────────────────────────────────────────────────")
     rows = load_csv(os.path.join(EXPORTS_26, "Note Export HFP Migration 2026-10-27.csv"))
     out, no_client, rehomed = [], [], 0
+    mt_counts = {}
+
     for r in rows:
         mt = str(r.get("model_type", "") or "").strip().lower()
         if mt == "board_task":
             continue
-        uid         = str(r.get("uuid", "") or "").strip()
-        acct_uid    = str(r.get("account_uuid", "") or "").strip()
-        contents    = str(r.get("contents", "") or "").strip()
-        created_at  = str(r.get("created_at", "") or "").strip()
+
+        uid        = str(r.get("uuid", "") or "").strip()
+        contents   = str(r.get("contents", "") or "").strip()
+        created_at = str(r.get("created_at", "") or "").strip()
+
+        # Resolve account_uuid: direct field first, then first from account_uuids
+        acct_uid = str(r.get("account_uuid", "") or "").strip()
+        if not acct_uid:
+            au = str(r.get("account_uuids", "") or "").replace("|", ",").replace(";", ",")
+            acct_uid = au.split(",")[0].strip()
 
         if not acct_uid:
             no_client.append({"note_uuid": uid, "model_type": mt})
             continue
 
+        # Determine output model_type and entity UUID fields
         if mt in ("task", "case"):
+            # AR decision: re-home task/case notes to client account record
             task_name  = str(r.get("task_name", "") or r.get("case_name", "") or "").strip()
             author     = str(r.get("author", "") or "").strip()
             date_short = dd_to_iso(created_at)[:10] if created_at else ""
@@ -1025,13 +1057,25 @@ def build_notes():
             if task_name:
                 header_parts.append(f'"{task_name}"')
             header = " ".join(header_parts) + "]"
-            contents = header + "\n" + contents
-            out_mt   = "account"
-            out_plan = ""
-            rehomed += 1
-        else:
-            out_mt   = mt if mt in ("account", "plan", "circle", "risk", "charge") else "account"
+            contents  = header + "\n" + contents
+            out_mt    = "account"
+            out_plan  = ""
+            out_risk  = ""
+            rehomed  += 1
+        elif mt == "plan":
+            out_mt   = "plan"
             out_plan = str(r.get("plan_uuid", "") or "").strip()
+            out_risk = ""
+        elif mt == "risk":
+            out_mt   = "risk"
+            out_plan = ""
+            out_risk = str(r.get("risk_uuid", "") or "").strip()
+        else:
+            # circle, charge, account — attach to client account
+            # (circle_uuid not available in export; 2 charge notes)
+            out_mt   = "account" if mt in ("circle", "charge") else mt
+            out_plan = str(r.get("plan_uuid", "") or "").strip() if mt == "account" else ""
+            out_risk = ""
 
         out.append({
             "model_type": out_mt,
@@ -1039,10 +1083,10 @@ def build_notes():
             "path": str(r.get("path", "") or "").strip(),
             "account_uuid": acct_uid,
             "plan_uuid": out_plan,
-            "risk_uuid": "" if mt in ("task", "case") else str(r.get("risk_uuid", "") or "").strip(),
+            "risk_uuid": out_risk,
             "case_uuid": "",
             "task_uuid": "",
-            "circle_uuid": "" if mt in ("task", "case") else str(r.get("circle_uuid", "") or "").strip(),
+            "circle_uuid": "",
             "contents": contents,
             "is_pinned": str(r.get("is_pinned", "") or "False").strip(),
             "visible_to_clients": str(r.get("visible_to_clients", "") or "False").strip(),
@@ -1050,8 +1094,10 @@ def build_notes():
             "external_reference_company": MIGRATION_CO,
             "external_reference_value": uid,
         })
+        mt_counts[mt] = mt_counts.get(mt, 0) + 1
 
-    p(f"  W8 notes: {len(out)} ({rehomed} re-homed task/case, {len(no_client)} no-account skipped)")
+    p(f"  W8 notes: {len(out)} ({rehomed} task/case re-homed, {len(no_client)} no-account skipped)")
+    p(f"  By source type: { {k: mt_counts.get(k,0) for k in ('account','task','case','plan','risk','circle','charge')} }")
     return out, no_client, rehomed
 
 
@@ -1152,7 +1198,7 @@ def main():
     pc2_results, merged_prov = pre_check_2()
 
     # ── Build waves ───────────────────────────────────────────────────────────
-    w1, w2_cl    = build_clients(cl_26)
+    w1, w2_cl, manual_phones = build_clients(cl_26)
     w2_cir       = build_circles()
     w3_rel       = build_relationships()
     w3_dep       = build_dependants()
@@ -1218,6 +1264,8 @@ def main():
             [{k: str(r.get(k, "") or "") for k in ["uuid","info_name","column","old_value","new_value"]} for r in pl_rev]),
         "Notes no account":         (["note_uuid", "model_type"],
             notes_no_cl),
+        "Manual phones":            (["external_reference_value", "phone"],
+            manual_phones),
     })
 
     # ── Report ────────────────────────────────────────────────────────────────
