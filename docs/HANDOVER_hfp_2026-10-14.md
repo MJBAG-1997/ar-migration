@@ -177,7 +177,10 @@ Notes: the AR returned only Clients, Plans (×3), and Charges sheets. The three 
 | Importer map call | `POST /api/v1/import/map/{uuid}` requires `{"headers": {col: col, …}}` (identity mapping). Calling with `{}` returns 422. Must wait ~8s after upload before calling map — headers aren't parsed immediately. |
 | `archived_reason` required | When status maps to ARCHIVED at dest, `archived_reason` is required. Valid value: `"Left firm - Firm decision"`. Source had no values set. |
 | Dest has no groups | `ccd7f98b` (HFP sub-account) has no client groups configured. Leave `groups` blank — any UUID causes "selected groups is invalid". |
-| Non-UK phones rejected | Plannr rejects non-+44 phone numbers with "invalid number" error. Three French (+33) numbers blanked. |
+| Non-UK phones rejected | Plannr rejects non-+44 phone numbers with "invalid number" error. Eight non-+44 numbers blanked; listed in "Manual phones" tab in hfp_build_lists_20261027.xlsx for post-import manual entry. |
+| Rate-needed charge matching | Returned Charges workbook is in different row order from sent. Match by `external_reference_value` dict, not row index. |
+| Rate-needed charge count | AR filled 47 non-zero rates (not 149 — the earlier figure was from a row-index comparison that picked up noise from row reordering). |
+| Valuations zero+no-date | 338 plans had zero value and no valuation_date in snapshot — skip these; they never had a valuation. Plans that legitimately went to zero (have a date) are kept. |
 
 ---
 
@@ -212,13 +215,23 @@ All 25 clients and 13 plans missing from 26 Oct export confirmed deleted (0 aliv
 | W4_plans.csv | 1 |
 | W5_plans.csv | 1893 (inc 25 Add-to-Plannr) |
 | W6_premiums.csv | 171 |
-| W6_valuations.csv | 1864 (494 at zero/no date) |
-| W7_charges.csv | 517 (368 sec A/B, 149 sec C; 57 omitted) |
-| W8_notes.csv | 601 (6195 board-task/no-account skipped) |
+| W6_valuations.csv | 1,526 (338 zero+no-date skipped, 156 zero-or-no-date loaded) |
+| W7_charges.csv | 420 (373 sec A/B, 47 sec C filled; 159 sec C omitted) |
+| W8_notes.csv | 6,796 (601 account, 4,784 task re-homed, 676 case re-homed, 663 plan, 26 risk, 44 circle, 2 charge) |
 
-**W1 validate result:** `complete`, 0 errors (import UUID `10c4ea3d-3b72-43ea-8221-e441352e806b`).
+**W1 validate result (post fix-pass):** `complete`, 0 errors (import UUID `bd1ba206-a335-4600-8173-3d6e8b7834c8`).
 
-Three validation iterations to reach 0 errors:
+Fix pass before load (fix items 1–8):
+1. Notes: use `account_uuids` fallback; task/case re-homed to client account with header line.
+2. Charges reconciled: 675 sent → 420 loaded (373 sec A/B, 47 sec C). AR filled 47 non-zero rates (earlier "149" figure was from flawed row-index comparison).
+3. pre_check_2 charges: 128 real changed cells after UUID-based matching (was 6,376 noise).
+4. Valuations: 338 zero+no-date rows skipped; 1,526 loaded.
+5. Relationships: 247 rows, 190 unique undirected pairs.
+6. Archived_reason: DECEASED → "Deceased" (3); ARCHIVED/INACTIVE → "Left firm - Firm decision" (47).
+7. Phones: 8 non-+44 phones blanked; listed in "Manual phones" tab in hfp_build_lists_20261027.xlsx for post-import entry.
+8. Trail Fees: 3 sheets (177/25/153 rows), no policy_number column — not loaded.
+
+Pre-fix validation errors:
 1. Groups UUID blanked (dest account `ccd7f98b` has no groups)
-2. `archived_reason = "Left firm - Firm decision"` for 50 archived/inactive/deceased W1 clients
-3. Three non-UK (+33) phones blanked
+2. `archived_reason = "Left firm - Firm decision"` / "Deceased"
+3. Non-UK (+33) phones blanked
