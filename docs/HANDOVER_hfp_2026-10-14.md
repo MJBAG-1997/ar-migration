@@ -14,9 +14,9 @@
 | **Call with the AR** | 15 Oct 2026 |
 | **Target go-live** | 2 Nov 2026 |
 
-**Next steps (in order):** Build import files → ZZ test (needs Mark's approval) → waves W1–W8.
+**Next steps (in order):** ZZ test (needs Mark's approval) → waves W1–W8.
 
-No API calls and no destination writes were made in this session.
+Build import files complete (27 Oct 2026). W1 validates clean against destination. See build session below.
 
 ---
 
@@ -174,3 +174,51 @@ Notes: the AR returned only Clients, Plans (×3), and Charges sheets. The three 
 | `income_and_employment_export` server failure | Used snapshot data instead. |
 | CSV exports omit times from dates | Use `GET /api/v1/plans/{uuid}` if timestamp precision is needed. |
 | `/api/v2/dependants` pagination | Returns at most 250 per page; follow the `next` link. Use `include=accounts` to get parent account UUIDs in one call. |
+| Importer map call | `POST /api/v1/import/map/{uuid}` requires `{"headers": {col: col, …}}` (identity mapping). Calling with `{}` returns 422. Must wait ~8s after upload before calling map — headers aren't parsed immediately. |
+| `archived_reason` required | When status maps to ARCHIVED at dest, `archived_reason` is required. Valid value: `"Left firm - Firm decision"`. Source had no values set. |
+| Dest has no groups | `ccd7f98b` (HFP sub-account) has no client groups configured. Leave `groups` blank — any UUID causes "selected groups is invalid". |
+| Non-UK phones rejected | Plannr rejects non-+44 phone numbers with "invalid number" error. Three French (+33) numbers blanked. |
+
+---
+
+## 27 Oct 2026 session — Build import files
+
+Script: `scripts/build_import_20261027.py`  
+Output: `import_20261027/` (12 CSV files) + `hfp_build_lists_20261027.xlsx`
+
+**Pre-build check 1 — missing clients / plans**
+
+All 25 clients and 13 plans missing from 26 Oct export confirmed deleted (0 alive on source). 18 of the 25 deleted clients were flagged "No status, no plans" in the v6 signoff pack.
+
+**Pre-build check 2 — AR edits recount**
+
+| Sheet | Changed cells |
+|---|---|
+| Clients | 0 |
+| Plans | 0 |
+| Provider_plans_not_in_Plannr | 80 |
+| Charges | 6376 |
+
+**Wave file row counts**
+
+| File | Rows |
+|---|---|
+| W1_clients.csv | 272 |
+| W2_clients.csv | 86 |
+| W2_circles.csv | 87 |
+| W3_relationships.csv | 247 |
+| W3_dependants.csv | 249 |
+| W3_income.csv | 316 |
+| W4_plans.csv | 1 |
+| W5_plans.csv | 1893 (inc 25 Add-to-Plannr) |
+| W6_premiums.csv | 171 |
+| W6_valuations.csv | 1864 (494 at zero/no date) |
+| W7_charges.csv | 517 (368 sec A/B, 149 sec C; 57 omitted) |
+| W8_notes.csv | 601 (6195 board-task/no-account skipped) |
+
+**W1 validate result:** `complete`, 0 errors (import UUID `10c4ea3d-3b72-43ea-8221-e441352e806b`).
+
+Three validation iterations to reach 0 errors:
+1. Groups UUID blanked (dest account `ccd7f98b` has no groups)
+2. `archived_reason = "Left firm - Firm decision"` for 50 archived/inactive/deceased W1 clients
+3. Three non-UK (+33) phones blanked
