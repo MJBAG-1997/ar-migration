@@ -10,11 +10,11 @@
 | | |
 |---|---|
 | **Pack sent** | 14 Oct 2026 |
-| **AR returns pack** | by Friday 23 Oct 2026 |
+| **AR returns pack** | 26 Oct 2026 (received) |
 | **Call with the AR** | 15 Oct 2026 |
 | **Target go-live** | 2 Nov 2026 |
 
-**Next steps (in order):** AR's answers → Block 4 clients validate run → ZZ test (needs Mark's approval) → waves W1–W8.
+**Next steps (in order):** Build import files → ZZ test (needs Mark's approval) → waves W1–W8.
 
 No API calls and no destination writes were made in this session.
 
@@ -84,13 +84,83 @@ The ten workbooks sent (all in `DATA_ROOT = C:\dev\AR Migration`):
 
 ---
 
+## AR decisions (confirmed 26 Oct 2026)
+
+| Decision | Detail |
+|---|---|
+| **Notes** | Bring all task and case notes across onto the client record. |
+| **Tags** | Not needed — do not migrate tags. |
+| **Plans `on_panel`** | Remove every answer; leave `on_panel` blank on all plans at import. 497 plans currently have a value (427 "No", 70 "Yes"). |
+| **Source Plannr frozen** | The AR's old Plannr is now read-only. The 26 Oct pull is the final extract. |
+
+---
+
+## 26 Oct 2026 session — AR review results
+
+Fresh exports pulled to `exports_20261026/`. All 7 reports succeeded (client, plan, charges, circle, premium, expenditure, note) plus dependants (249 rows with `include=accounts`). Detail in `hfp_changes_20261026.xlsx`.
+
+**Step 1b — Valuations (plan_export current_value / current_value_at)**
+
+| | |
+|---|---|
+| Plans with changed value or date | 522 |
+| Value + date changed | 491 |
+| Date only changed | 31 |
+| Multi-owner plans (not split) | 0 |
+| Total value before (changed plans, £) | 92,941,916 |
+| Total value after (changed plans, £) | 83,151,806 |
+
+Unit verified: snapshot pence ÷ 100 = export pounds (5/5 spot checks).
+
+**Step 2a — AR edits (RETURNED vs SENT)**
+
+| Sheet | Added | Deleted | Changed cells | Format-only |
+|---|---|---|---|---|
+| Clients | 0 | 0 | 0 | 0 |
+| Plans | 0 | 0 | 0 | 0 |
+| Provider_plans_not_in_Plannr | 0 | 0 | 80 | 0 |
+| Charges | 0 | 0 | 0 | 0 |
+
+Notes: the AR returned only Clients, Plans (×3), and Charges sheets. The three returned Plans files merged cleanly (0 intra-conflicts). "Trail Fees (Excluding Transact & Rathbones).xlsx" was returned as supplementary data — not one of the ten sent workbooks.
+
+**Step 2b — What the AR wrote**
+
+| Item | Count |
+|---|---|
+| Review entries on Clients | 16 |
+| Review entries on Plans | 67 |
+| Provider "Add to Plannr" rows | 32 (all have Client in your Plannr filled) |
+| Provider "Already in Plannr" rows | 19 |
+| Charges — Rate needed rows filled in | 149 |
+| Charges — Rate needed rows still blank | 57 |
+| Charges — Protection rows with new amount | 60 |
+| Charges rows deleted | 0 |
+
+**Step 2c — CRM changes (26 Oct export vs 14 Oct export)**
+
+| Entity | Old | New | Added | Deleted | Changed records |
+|---|---|---|---|---|---|
+| clients | 375 | 358 | 8 | 25 | 217 (incl. 178 `aum` recalc) |
+| plans | 1,871 | 1,869 | 11 | 13 | 572 (incl. 522 valuation) |
+| charges | 372 | 373 | 2 | 1 | 18 |
+| circles | 92 | 87 | 1 | 6 | 6 membership changes |
+| premiums | 173 | 171 | 0 | 2 | 3 |
+| notes | 8,922 | 8,874 | 43 | 91 | 170 |
+| expenditure | 2,381 | 2,381 | 0 | 0 | 0 |
+| dependants | 250 | 249 | 2 | 3 | 0 |
+
+**Step 2d — Conflicts:** 0 (no field changed by both the AR and the CRM).
+
+---
+
 ## Open items
 
 | Item | Note |
 |---|---|
 | **Vision IFP** | The AR's old network. Every reference to Vision IFP must be removed. Not yet swept from any sheet. |
-| **Tags** | Not in the sheets. Decision pending. |
 | **Board-task notes** | 2,104 notes are workflow templates with no client link. They stay behind in the old Plannr. |
+| **Charges — 57 Rate needed rows still blank** | AR did not fill these in; they will be omitted at import. |
+| **25 clients deleted from CRM** | Review before import — confirm these are genuine deletions, not errors. |
 
 ---
 
