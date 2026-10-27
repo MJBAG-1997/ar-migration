@@ -28,6 +28,8 @@ SENT_CHARGES_XLSX = os.path.join(DATA_ROOT, "Plannr_Charges.xlsx")
 RETURNED_CHARGES  = os.path.join(RETURNED_DIR, "Plannr Charges.xlsx")
 RETURNED_CLIENTS  = os.path.join(RETURNED_DIR, "Clients with no Adviser.xlsx")
 SIGNOFF_V6_XLSX   = os.path.join(DATA_ROOT, "hfp_signoff_pack_v6.xlsx")
+TRANSACT_RATES_XLSX = os.path.join(DATA_ROOT,
+    "Hoban_Financial_Planning_Ltd_260922_Payment_Rates_113727875.xlsx")
 
 BASE_URL          = "https://api.plannrcrm.com"
 KV_NAME           = "kv-plannr-ingestion"
@@ -398,6 +400,8 @@ CLIENT_KEYS = [
     "archived_reason","archived_notes",
 ]
 
+_ADVISER_NAMES = {"jim hoban","jim","katie","katie hoban","tommie","tommie hoban","tomme","valerie","valerie hoban"}
+
 def load_review_overrides():
     """Load client review entries: return (deleted_uuids, adviser_overrides)."""
     _, rows = load_xlsx_rows(CHANGES_XLSX, "Review entries")
@@ -413,6 +417,30 @@ def load_review_overrides():
         elif uid and new and new not in ("", "no adviser", "client has been deleted"):
             adviser[uid] = new
     return deleted, adviser
+
+def classify_review_entries():
+    """Return (applied_list, unapplied_list) from Review entries tab."""
+    _, rows = load_xlsx_rows(CHANGES_XLSX, "Review entries")
+    applied, unapplied = [], []
+    for r in rows:
+        sheet = str(r.get("sheet", "") or "").strip()
+        uid   = str(r.get("uuid", "") or "").strip()
+        old   = str(r.get("old_value", "") or "").strip()
+        new   = str(r.get("new_value", "") or "").strip()
+        new_l = new.lower()
+        if sheet == "Clients":
+            if "deleted" in new_l:
+                applied.append({"sheet": sheet, "uuid": uid, "type": "client_deleted", "new_value": new})
+            elif new_l in _ADVISER_NAMES:
+                applied.append({"sheet": sheet, "uuid": uid, "type": "adviser", "new_value": new})
+            else:
+                unapplied.append({"sheet": sheet, "uuid": uid, "old_value": old, "new_value": new})
+        elif sheet == "Plans":
+            if old == "No adviser" and "deleted" in new_l:
+                applied.append({"sheet": sheet, "uuid": uid, "type": "plan_deleted_client", "new_value": new})
+            else:
+                unapplied.append({"sheet": sheet, "uuid": uid, "old_value": old, "new_value": new})
+    return applied, unapplied
 
 def build_clients(cl_26):
     p("\n── Building W1/W2 clients ────────────────────────────────────────────────")
@@ -506,27 +534,52 @@ def build_circles():
 
 REL_KEYS = ["account_uuid","related_account_uuid","relationship","inverse_relationship"]
 
+INVERSE_REL = {
+    "parent": "child",       "child": "parent",
+    "grandparent": "grandchild", "grandchild": "grandparent",
+    "aunt_uncle": "niece_nephew", "niece_nephew": "aunt_uncle",
+    "spouse": "spouse",      "partner": "partner",
+    "sibling": "sibling",    "cousin": "cousin",
+    "civil-partner": "civil-partner", "co-habiting": "co-habiting",
+    "ex-spouse": "ex-spouse", "primary-contact": "primary-contact",
+    "other": "other",
+}
+
 def build_relationships():
     p("\n── Building W3 relationships ─────────────────────────────────────────────")
     acct = load_json(os.path.join(SNAP_DIR, "account_details.json"))
-    seen, rows = set(), []
+    cl_26 = load_csv(os.path.join(EXPORTS_26, "Client Export HFP Migration 2026-10-27.csv"))
+    alive = {r["uuid"] for r in cl_26 if r.get("uuid")}
+
+    # Collect per-pair directional relationships
+    pair_rels = defaultdict(list)  # sorted_pair -> [(from_uuid, to_uuid, rel_type), ...]
     for cl_uuid, det in acct.items():
         for lc in det.get("linked_clients", []):
             rel_uuid = str(lc.get("uuid", "") or "").strip()
             rel_type = str(lc.get("relationship", "") or "").strip()
             if not rel_uuid or not rel_type:
                 continue
-            pair = tuple(sorted([cl_uuid, rel_uuid])) + (rel_type,)
-            if pair in seen:
+            if cl_uuid not in alive or rel_uuid not in alive:
                 continue
-            seen.add(pair)
-            rows.append({
-                "account_uuid": cl_uuid,
-                "related_account_uuid": rel_uuid,
-                "relationship": rel_type,
-                "inverse_relationship": rel_type,
-            })
-    p(f"  W3 relationships: {len(rows)}")
+            pair = tuple(sorted([cl_uuid, rel_uuid]))
+            pair_rels[pair].append((cl_uuid, rel_uuid, rel_type))
+
+    # One row per pair: relationship from canonical direction + inverse
+    rows = []
+    for pair, rels in pair_rels.items():
+        a, b = pair
+        rel_ab = next((r[2] for r in rels if r[0] == a), None)
+        rel_ba = next((r[2] for r in rels if r[0] == b), None)
+        if rel_ab:
+            inv = rel_ba if rel_ba else INVERSE_REL.get(rel_ab, rel_ab)
+            rows.append({"account_uuid": a, "related_account_uuid": b,
+                         "relationship": rel_ab, "inverse_relationship": inv})
+        elif rel_ba:
+            rows.append({"account_uuid": b, "related_account_uuid": a,
+                         "relationship": rel_ba,
+                         "inverse_relationship": INVERSE_REL.get(rel_ba, rel_ba)})
+
+    p(f"  W3 relationships: {len(rows)} ({len(pair_rels)} unique pairs, {247 - len(rows)} deduped)")
     return rows
 
 
@@ -725,16 +778,21 @@ def build_plans(pl_26, cl_26, merged_prov):
         (w4 if is_wrap else w5).append(out)
 
     # Provider "Add to Plannr" from merged_prov
-    seen_ports = set()
+    seen_ext_refs = set()
     for pr in merged_prov.values():
         action = str(pr.get("action", "") or "").strip().lower()
         port_num = str(pr.get("Portfolio number", "") or "").strip()
-        if action == "add to plannr" and port_num and port_num not in seen_ports:
-            seen_ports.add(port_num)
+        wrap_ref = str(pr.get("Wrapper ref", "") or "").strip()
+        # Build unique ext-ref value: prov-{port_num}-{wrap_ref} or prov-{port_num}
+        ext_ref_val = f"prov-{port_num}-{wrap_ref}" if wrap_ref else f"prov-{port_num}"
+        if action == "add to plannr" and port_num and ext_ref_val not in seen_ext_refs:
+            seen_ext_refs.add(ext_ref_val)
             client_name_raw = str(pr.get("Client in your Plannr", "") or "").strip()
             port_name = str(pr.get("Portfolio name", "") or "").strip()
             source = str(pr.get("source", "") or "").strip()
             amount = str(pr.get("Amount", "") or "").strip()
+            # policy_number = wrapper_ref when available (unique per plan), else port_num
+            policy_num = wrap_ref if wrap_ref else port_num
 
             # Match client
             cl_uid = cl_name_map.get(_norm_name(client_name_raw), "")
@@ -750,17 +808,19 @@ def build_plans(pl_26, cl_26, merged_prov):
                 "uuid": "",
                 "type": plan_type,
                 "client_uuids": cl_uid,
-                "policy_number": port_num,
+                "policy_number": policy_num,
                 "provider": source,
                 "status": "active",
-                "under_advice": "True",
-                "agency_in_your_name": "True",
+                "under_advice": "Yes",
+                "agency_in_your_name": "Yes",
+                "agency_in_your_name_from": "",
                 "on_panel": "",
-                "external_reference_company": "data_migration_provider",
-                "external_reference_value": port_num,
+                "external_reference_company": MIGRATION_CO,
+                "external_reference_value": ext_ref_val,
             })
             w5.append(new_row)
             prov_add.append({"port_name": port_name, "port_num": port_num,
+                             "ext_ref_val": ext_ref_val, "policy_num": policy_num,
                              "client_name": client_name_raw, "client_uuid": cl_uid,
                              "amount": amount, "source": source})
 
@@ -858,6 +918,9 @@ def build_valuations(pl_26):
             if new_date:
                 val_date = new_date
 
+        if plan_uid not in pl_export:
+            continue  # plan deleted between snapshot and 26 Oct export — skip
+
         pol_num = str((pl_export.get(plan_uid) or {}).get("policy_number", "") or "").strip()
 
         row = {
@@ -875,6 +938,25 @@ def build_valuations(pl_26):
             zero_blank.append({"plan_uuid": plan_uid, "value": f"{pounds:.2f}", "valuation_date": val_date})
 
     p(f"  W6 valuations: {len(out)} ({len(zero_blank)} at zero or no date; {sum(1 for z in zero_blank if z['value']=='0.00' and not z['valuation_date'])} zero+no-date skipped)")
+
+    # Item 4: compare W6 totals vs 26 Oct export totals for the same plans
+    pl_type_map = {r["uuid"]: str(r.get("type", "") or "") for r in pl_26}
+    w6_by_type, exp_by_type = defaultdict(float), defaultdict(float)
+    for row in out:
+        puid = row["plan_uuid"]
+        pt   = pl_type_map.get(puid, "unknown")
+        w6_by_type[pt]  += float(row["value"] or 0)
+        try:
+            exp_v = float(str((pl_export.get(puid) or {}).get("current_value", "") or "").replace(",", ""))
+        except ValueError:
+            exp_v = 0.0
+        exp_by_type[pt] += exp_v
+    w6_total  = sum(w6_by_type.values())
+    exp_total = sum(exp_by_type.values())
+    p(f"  Val check (W6 plans only): W6=£{w6_total:,.0f}  export=£{exp_total:,.0f}  gap=£{exp_total - w6_total:,.0f}")
+    for pt in sorted(set(list(w6_by_type) + list(exp_by_type))):
+        p(f"    {pt or 'blank'}: W6=£{w6_by_type[pt]:,.0f} | export=£{exp_by_type[pt]:,.0f}")
+
     return out, zero_blank
 
 
@@ -891,106 +973,95 @@ CHARGE_KEYS = [
     "notes",
 ]
 
-def build_charges():
+def build_charges(prov_add=None):
     p("\n── Building W7 charges ───────────────────────────────────────────────────")
 
-    ch_26 = load_csv(os.path.join(EXPORTS_26, "Charges Export HFP Migration 2026-10-27.csv"))
-    sh_ch, sent_ch = load_xlsx_rows(SENT_CHARGES_XLSX, "Charges")
-    _,     ret_ch  = load_xlsx_rows(RETURNED_CHARGES,  "Charges")
+    _, sent_ch = load_xlsx_rows(SENT_CHARGES_XLSX, "Charges")
+    _, ret_ch  = load_xlsx_rows(RETURNED_CHARGES,  "Charges")
 
-    # Section A/B: pass through from 26 Oct export (exclude Rate-needed plan_uuids)
-    # Section C:   Rate needed rows from sent workbook + AR-filled percentages from returned
+    # Alive plans (to filter deleted plans)
+    pl_26_raw = load_csv(os.path.join(EXPORTS_26, "Plan Export HFP Migration 2026-10-27.csv"))
+    alive_plans = {r["uuid"] for r in pl_26_raw if r.get("uuid")}
 
-    # Build set of Rate-needed plan_uuids from sent workbook
-    rate_needed_plans = set()
-    for r in sent_ch:
-        if str(r.get("basis", "") or "").strip() == "Rate needed":
-            pid = str(r.get("plan_uuid", "") or "").strip()
-            if pid:
-                rate_needed_plans.add(pid)
+    # Add-to-Plannr: use prov_add (built in build_plans) which has resolved client_uuid, ext_ref_val
+    # prov_add rows: {"port_name", "port_num", "ext_ref_val", "policy_num",
+    #                 "client_name", "client_uuid", "amount", "source"}
+    if prov_add is None:
+        prov_add = []
+    add_to_pl_transact  = [r for r in prov_add
+                           if str(r.get("source", "") or "").strip().lower() == "transact"]
+    add_to_pl_rathbones = [r for r in prov_add
+                           if str(r.get("source", "") or "").strip().lower() == "rathbones"]
 
-    # Build ext-ref → returned row lookup (returned workbook may be in different order)
+    # Payment Rates lookup: portfolio_number → {cash, inv} annual rate (decimal, e.g. 0.006)
+    rate_by_port = {}
+    try:
+        _, pay_rate_rows = load_xlsx_rows(TRANSACT_RATES_XLSX, "Payment Rates Summary")
+        for r in pay_rate_rows:
+            pn = str(r.get("Portfolio Number", "") or "").strip()
+            if not pn:
+                continue
+            try:
+                cash = float(r.get("Annual Payment - Cash") or 0)
+            except (TypeError, ValueError):
+                cash = 0.0
+            try:
+                inv = float(r.get("Annual Payment - Investments") or 0)
+            except (TypeError, ValueError):
+                inv = 0.0
+            if pn not in rate_by_port:
+                rate_by_port[pn] = {"cash": cash, "inv": inv}
+            else:
+                rate_by_port[pn]["cash"] = max(rate_by_port[pn]["cash"], cash)
+                rate_by_port[pn]["inv"]  = max(rate_by_port[pn]["inv"],  inv)
+    except Exception as e:
+        p(f"  WARN: could not load Payment Rates: {e}")
+
+    # Returned workbook ext-ref → row lookup (may be in different order from sent)
     ret_by_extref = {}
     for rr in ret_ch:
         ext = str(rr.get("external_reference_value", "") or "").strip()
         if ext:
             ret_by_extref[ext] = rr
 
-    # Rate-needed charge ext-refs (to exclude their export rows when they exist in source)
-    rate_needed_ext_refs = {
-        str(r.get("external_reference_value", "") or "").strip()
-        for r in sent_ch
-        if str(r.get("basis", "") or "").strip() == "Rate needed"
-        and str(r.get("external_reference_value", "") or "").strip()
-    }
-
-    # Section A/B rows from export (skip ONLY charges whose own ext-ref is Rate-needed)
-    sec_ab = []
-    for r in ch_26:
-        ext = str(r.get("external_reference_value", "") or "").strip()
-        if ext and ext in rate_needed_ext_refs:
-            continue  # this specific charge is Rate-needed; sec C will cover it
-        out = {k: str(r.get(k, "") or "").strip() for k in CHARGE_KEYS}
-        out["uuid"] = ""
-        out["adviser_uuid"] = map_adviser(r.get("adviser_uuid", ""))
-        if "protection" in str(r.get("plan_type", "") or "").lower():
-            out["type"] = "Commission"
-        cl_uids = str(r.get("client_uuids", "") or "").replace("|", ",")
-        out["client_uuid"] = cl_uids.split(",")[0].strip()
-        sec_ab.append(out)
-
-    # Section C: Rate-needed rows — match returned by external_reference_value
-    rate_filled, rate_blank, high_rates = [], [], []
-    sec_c = []
-    for sr in sent_ch:
-        if str(sr.get("basis", "") or "").strip() != "Rate needed":
-            continue
-        ext_ref = str(sr.get("external_reference_value", "") or "").strip()
-        rr = ret_by_extref.get(ext_ref, {})
-        pct_raw = str(rr.get("percentage", "") or "").strip()
-        plan_uid   = str(sr.get("plan_uuid", "") or "").strip()
-        cl_uid     = str(sr.get("client_uuid", "") or "").strip()
-        adv_uid    = str(sr.get("adviser_uuid", "") or "").strip()
-        info_adv   = str(sr.get("INFO: Adviser", "") or "").strip()
-        amount_raw = str(rr.get("amount", "") or sr.get("ORIGINAL_amount", "") or "").strip()
-        freq_raw   = str(rr.get("frequency", "") or sr.get("frequency", "") or "").strip()
-
-        if not pct_raw:
-            rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid, "info_adviser": info_adv})
-            continue
-
+    def _read_pct(raw):
+        """Parse percentage raw value → corrected float, or None if zero/blank/non-numeric."""
+        s = str(raw or "").strip()
+        if not s:
+            return None
         try:
-            pct = float(pct_raw.replace("%", "").replace(",", ""))
+            v = float(s.replace("%", "").replace(",", ""))
         except ValueError:
-            rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid, "info_adviser": info_adv})
-            continue
+            return None
+        if v == 0.0:
+            return None
+        if 0 < v < 0.1:
+            v *= 100.0  # Excel stores 0.6% as 0.006
+        return v
 
-        if pct < 0.1:
-            pct *= 100.0  # Excel percentage format correction
-        if pct > 3.0:
-            high_rates.append({"plan_uuid": plan_uid, "client_uuid": cl_uid, "percentage": f"{pct:.4f}"})
-
-        ch_row = {
-            "uuid": "",
-            "plan_uuid": plan_uid,
-            "client_uuid": cl_uid,
-            "adviser_uuid": map_adviser(adv_uid),
-            "payment_origin": str(sr.get("payment_origin", "") or "Provider").strip(),
-            "type": str(sr.get("type", "") or "Fee").strip(),
-            "category": str(sr.get("category", "") or "ongoing").strip(),
-            "recurring": str(sr.get("recurring", "") or "True").strip(),
-            "frequency": freq_raw,
-            "start_date": str(sr.get("start_date", "") or "").strip(),
-            "end_date": "",
-            "amount": amount_raw,
-            "percentage": f"{pct:.4f}",
-            "percentage_frequency": str(sr.get("percentage_frequency", "") or "annually").strip(),
+    def _sent_row(r, pct):
+        """Build a CHARGE_KEYS row from a sent-workbook row and a resolved percentage float."""
+        return {
+            "uuid":        "",
+            "plan_uuid":   str(r.get("plan_uuid", "") or "").strip(),
+            "client_uuid": str(r.get("client_uuid", "") or "").strip(),
+            "adviser_uuid": map_adviser(str(r.get("adviser_uuid", "") or "")),
+            "payment_origin": str(r.get("payment_origin", "") or "Provider").strip(),
+            "type":         str(r.get("type", "") or "Fee").strip(),
+            "category":     ("ongoing_fee" if str(r.get("category","") or "") in ("","ongoing") else str(r.get("category","")).strip()),
+            "recurring":    str(r.get("recurring", "") or "True").strip(),
+            "frequency":    str(r.get("frequency", "") or "").strip(),
+            "start_date":   str(r.get("start_date", "") or "").strip(),
+            "end_date":     "",
+            "amount":       str(r.get("amount", "") or "").strip(),
+            "percentage":   f"{pct:.4f}" if pct is not None else "",
+            "percentage_frequency": str(r.get("percentage_frequency", "") or "annually").strip(),
             "tax": "",
-            "tax_exempt": str(sr.get("tax_exempt", "") or "Yes").strip(),
-            "exclude_from_rmar": str(sr.get("exclude_from_rmar", "") or "No").strip(),
-            "advice_type": str(sr.get("advice_type", "") or "Independent").strip(),
-            "service_type": str(sr.get("service_type", "") or "ongoing_service").strip(),
-            "rmar_type": str(sr.get("rmar_type", "") or "Adviser Charge").strip(),
+            "tax_exempt":         str(r.get("tax_exempt", "") or "Yes").strip(),
+            "exclude_from_rmar":  str(r.get("exclude_from_rmar", "") or "No").strip(),
+            "advice_type":        str(r.get("advice_type", "") or "Independent").strip(),
+            "service_type":       ("ongoing" if str(r.get("service_type","") or "") in ("","ongoing_service") else str(r.get("service_type","")).strip()),
+            "rmar_type":          str(r.get("rmar_type", "") or "Adviser Charge").strip(),
             "premium_uuid": "",
             "advice_area_deposit": "",
             "advice_area_non_regulated": "",
@@ -1000,16 +1071,169 @@ def build_charges():
             "advice_area_retail_investment": "100%",
             "advice_area_other_fca_regulated": "",
             "advice_area_unknown": "",
-            "notes": str(sr.get("notes", "") or "").strip(),
+            "notes": str(r.get("notes", "") or "").strip(),
         }
-        sec_c.append(ch_row)
-        rate_filled.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
-                            "percentage": f"{pct:.4f}", "info_adviser": info_adv})
 
-    all_charges = sec_ab + sec_c
-    p(f"  W7 charges: {len(all_charges)} ({len(sec_ab)} sec A/B, {len(sec_c)} sec C filled, "
-      f"{len(rate_blank)} sec C omitted, {len(high_rates)} high rates)")
-    return all_charges, rate_filled, rate_blank, high_rates
+    # ── Sec A: Provider statement + Rathbones (nonzero rate, alive plans) ─────
+    sec_a, high_rates = [], []
+    for r in sent_ch:
+        basis = str(r.get("basis", "") or "").strip()
+        if basis not in ("Provider statement", "Rathbones"):
+            continue
+        plan_uid = str(r.get("plan_uuid", "") or "").strip()
+        if not plan_uid or plan_uid not in alive_plans:
+            continue
+        pct = _read_pct(r.get("percentage"))
+        if pct is None:
+            continue
+        if pct > 3.0:
+            high_rates.append({"plan_uuid": plan_uid,
+                                "client_uuid": str(r.get("client_uuid", "") or ""),
+                                "percentage": f"{pct:.4f}"})
+        sec_a.append(_sent_row(r, pct))
+
+    # ── Sec B: Your Plannr ongoing charges (alive plans) ──────────────────────
+    sec_b = []
+    for r in sent_ch:
+        basis = str(r.get("basis", "") or "").strip()
+        if basis != "Your Plannr":
+            continue
+        plan_uid = str(r.get("plan_uuid", "") or "").strip()
+        if not plan_uid or plan_uid not in alive_plans:
+            continue
+        pct = _read_pct(r.get("percentage"))
+        row = _sent_row(r, pct)
+        # If no percentage, use amount (Sec B may be fixed-amount charges)
+        if not row["percentage"]:
+            row["amount"] = str(r.get("amount", "") or r.get("ORIGINAL_amount", "") or "").strip()
+        sec_b.append(row)
+
+    # ── Sec C: Rate-needed — AR-filled percentages from returned workbook ──────
+    rate_filled, rate_blank = [], []
+    rate_entered = {"rate": 0, "zero": 0, "blank": 0, "text": 0}
+    sec_c = []
+    for sr in sent_ch:
+        if str(sr.get("basis", "") or "").strip() != "Rate needed":
+            continue
+        ext_ref  = str(sr.get("external_reference_value", "") or "").strip()
+        plan_uid = str(sr.get("plan_uuid", "") or "").strip()
+        cl_uid   = str(sr.get("client_uuid", "") or "").strip()
+        info_adv = str(sr.get("INFO: Adviser", "") or "").strip()
+
+        rr = ret_by_extref.get(ext_ref, {})
+        # Distinguish None/missing from explicit zero (int 0 or float 0.0)
+        if not rr or rr.get("percentage") is None:
+            rate_entered["blank"] += 1
+            rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                                "ar_entered": "blank", "info_adviser": info_adv})
+            continue
+        raw_pct = rr["percentage"]
+        # Excel stores blank as None (handled above); zero appears as int 0 or float 0.0
+        try:
+            v = float(str(raw_pct).replace("%", "").replace(",", "").strip())
+        except (ValueError, AttributeError):
+            s = str(raw_pct or "").strip()
+            if not s:
+                rate_entered["blank"] += 1
+                rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                                    "ar_entered": "blank", "info_adviser": info_adv})
+            else:
+                rate_entered["text"] += 1
+                rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                                    "ar_entered": f"text:{s[:30]}", "info_adviser": info_adv})
+            continue
+
+        if v == 0.0:
+            rate_entered["zero"] += 1
+            rate_blank.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                                "ar_entered": "zero", "info_adviser": info_adv})
+            continue
+
+        rate_entered["rate"] += 1
+        if 0 < v < 0.1:
+            v *= 100.0
+        if v > 3.0:
+            high_rates.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                                "percentage": f"{v:.4f}"})
+
+        row = _sent_row(sr, v)
+        # Sec C: use returned frequency if present
+        ret_freq = str((rr or {}).get("frequency", "") or "").strip()
+        if ret_freq:
+            row["frequency"] = ret_freq
+        sec_c.append(row)
+        rate_filled.append({"plan_uuid": plan_uid, "client_uuid": cl_uid,
+                            "percentage": f"{v:.4f}", "info_adviser": info_adv})
+
+    # ── Add-to-Plannr charges — in W7 with ext_ref_val as plan_uuid placeholder ─
+    # plan_uuid is set to ext_ref_val; the import runner resolves it after W5.
+    add_ch_report = []
+    add_ch_w7     = []
+    for r in add_to_pl_transact:
+        pn       = str(r.get("port_num", "") or "").strip()
+        name     = str(r.get("port_name", "") or "").strip()
+        cl       = str(r.get("client_uuid", "") or "").strip()
+        ext_ref  = str(r.get("ext_ref_val", "") or "").strip()
+        adv_uuid = map_adviser("")
+        rates    = rate_by_port.get(pn, {})
+        inv_rate  = rates.get("inv", 0.0)
+        cash_rate = rates.get("cash", 0.0)
+        rate_dec  = inv_rate if inv_rate > 0 else cash_rate
+        add_ch_report.append({
+            "portfolio_number": pn,
+            "ext_ref_val":      ext_ref,
+            "port_name": name,
+            "client_uuid": cl,
+            "annual_rate_dec": f"{rate_dec:.4f}" if rate_dec else "",
+            "pct_for_plannr":  f"{rate_dec * 100:.4f}" if rate_dec else "",
+            "source": "Transact Payment Rates",
+        })
+        if rate_dec > 0 and ext_ref and cl:
+            ch_row = {k: "" for k in CHARGE_KEYS}
+            ch_row.update({
+                "plan_uuid":   ext_ref,   # placeholder; resolved by import runner after W5
+                "client_uuid": cl,
+                "adviser_uuid": adv_uuid,
+                "payment_origin": "Provider",
+                "type":     "Fee",
+                "category": "ongoing_fee",
+                "recurring": "True",
+                "frequency": "quarterly",
+                "start_date": "",
+                "percentage": f"{rate_dec * 100:.4f}",
+                "percentage_frequency": "annually",
+                "tax_exempt": "Yes",
+                "exclude_from_rmar": "No",
+                "advice_type": "Independent",
+                "service_type": "ongoing",
+                "rmar_type": "Adviser Charge",
+                "advice_area_retail_investment": "100%",
+            })
+            add_ch_w7.append(ch_row)
+    for r in add_to_pl_rathbones:
+        pn      = str(r.get("port_num", "") or "").strip()
+        name    = str(r.get("port_name", "") or "").strip()
+        cl      = str(r.get("client_uuid", "") or "").strip()
+        ext_ref = str(r.get("ext_ref_val", "") or "").strip()
+        amt     = str(r.get("amount", "") or "").strip()
+        add_ch_report.append({
+            "portfolio_number": pn,
+            "ext_ref_val":      ext_ref,
+            "port_name": name,
+            "client_uuid": cl,
+            "annual_rate_dec": "",
+            "pct_for_plannr":  "",
+            "source": f"Rathbones — amount={amt}",
+        })
+
+    all_charges = sec_a + sec_b + sec_c + add_ch_w7
+    p(f"  Rate-needed 206: rate={rate_entered['rate']}, zero={rate_entered['zero']}, "
+      f"blank={rate_entered['blank']}, text={rate_entered['text']}")
+    p(f"  W7 charges: {len(all_charges)} ({len(sec_a)} sec A, {len(sec_b)} sec B, "
+      f"{len(sec_c)} sec C, {len(add_ch_w7)} Add-to-Plannr)")
+    p(f"  Add-to-Plannr report: {len(add_ch_report)} rows ({len(add_ch_w7)} with rate → in W7)")
+    p(f"  High rates >3%: {len(high_rates)}")
+    return all_charges, rate_filled, rate_blank, high_rates, add_ch_report
 
 
 # ─── Build W8 notes ───────────────────────────────────────────────────────────
@@ -1067,14 +1291,33 @@ def build_notes():
             out_plan = str(r.get("plan_uuid", "") or "").strip()
             out_risk = ""
         elif mt == "risk":
-            out_mt   = "risk"
-            out_plan = ""
-            out_risk = str(r.get("risk_uuid", "") or "").strip()
+            # Risk profiles not imported; re-home to client account with header
+            author     = str(r.get("author", "") or "").strip()
+            date_short = dd_to_iso(created_at)[:10] if created_at else ""
+            header_parts = ["[risk note"]
+            if author:      header_parts.append(f"by {author}")
+            if date_short:  header_parts.append(f"on {date_short}")
+            contents  = " ".join(header_parts) + "]\n" + contents
+            out_mt    = "account"
+            out_plan  = ""
+            out_risk  = ""
+            rehomed  += 1
+        elif mt in ("circle", "charge"):
+            # Re-home to client account with header
+            author     = str(r.get("author", "") or "").strip()
+            date_short = dd_to_iso(created_at)[:10] if created_at else ""
+            header_parts = [f"[{mt} note"]
+            if author:      header_parts.append(f"by {author}")
+            if date_short:  header_parts.append(f"on {date_short}")
+            contents  = " ".join(header_parts) + "]\n" + contents
+            out_mt    = "account"
+            out_plan  = ""
+            out_risk  = ""
+            rehomed  += 1
         else:
-            # circle, charge, account — attach to client account
-            # (circle_uuid not available in export; 2 charge notes)
-            out_mt   = "account" if mt in ("circle", "charge") else mt
-            out_plan = str(r.get("plan_uuid", "") or "").strip() if mt == "account" else ""
+            # account — attach directly
+            out_mt   = mt
+            out_plan = str(r.get("plan_uuid", "") or "").strip()
             out_risk = ""
 
         out.append({
@@ -1206,7 +1449,7 @@ def main():
     w4, w5, zero_val, prov_add, prov_already = build_plans(pl_26, cl_26, merged_prov)
     w6_prem      = build_premiums()
     w6_val, zero_blank_val = build_valuations(pl_26)
-    w7, rate_filled, rate_blank, high_rates = build_charges()
+    w7, rate_filled, rate_blank, high_rates, add_ch_report = build_charges(prov_add)
     w8, notes_no_cl, rehomed = build_notes()
 
     # ── Write CSVs ────────────────────────────────────────────────────────────
@@ -1229,9 +1472,12 @@ def main():
     val = validate_w1(dest)
 
     # ── Build lists Excel ─────────────────────────────────────────────────────
+    rev_applied, rev_unapplied = classify_review_entries()
     _, rev_rows = load_xlsx_rows(CHANGES_XLSX, "Review entries")
-    cl_rev  = [r for r in rev_rows if str(r.get("sheet", "") or "") == "Clients"]
-    pl_rev  = [r for r in rev_rows if str(r.get("sheet", "") or "") == "Plans"]
+    cl_rev = [{k: str(r.get(k,"") or "") for k in ["uuid","info_name","column","old_value","new_value"]}
+              for r in rev_rows if str(r.get("sheet","") or "") == "Clients"]
+    pl_rev = [{k: str(r.get(k,"") or "") for k in ["uuid","info_name","column","old_value","new_value"]}
+              for r in rev_rows if str(r.get("sheet","") or "") == "Plans"]
 
     write_lists({
         "PC1 deleted clients":      (["uuid"],
@@ -1254,14 +1500,21 @@ def main():
             prov_already),
         "Charges sec C filled":     (["plan_uuid", "client_uuid", "percentage", "info_adviser"],
             rate_filled),
-        "Charges sec C omitted":    (["plan_uuid", "client_uuid", "info_adviser"],
+        "Charges sec C omitted":    (["plan_uuid", "client_uuid", "ar_entered", "info_adviser"],
             rate_blank),
         "Charges high rate >3pct":  (["plan_uuid", "client_uuid", "percentage"],
             high_rates),
+        "W7 add-to-Plannr":         (["portfolio_number", "ext_ref_val", "port_name",
+                                       "client_uuid", "annual_rate_dec", "pct_for_plannr", "source"],
+            add_ch_report),
         "Review entries clients":   (["uuid", "info_name", "column", "old_value", "new_value"],
-            [{k: str(r.get(k, "") or "") for k in ["uuid","info_name","column","old_value","new_value"]} for r in cl_rev]),
+            cl_rev),
         "Review entries plans":     (["uuid", "info_name", "column", "old_value", "new_value"],
-            [{k: str(r.get(k, "") or "") for k in ["uuid","info_name","column","old_value","new_value"]} for r in pl_rev]),
+            pl_rev),
+        "Review applied":           (["sheet", "uuid", "type", "new_value"],
+            rev_applied),
+        "Review unapplied":         (["sheet", "uuid", "old_value", "new_value"],
+            rev_unapplied),
         "Notes no account":         (["note_uuid", "model_type"],
             notes_no_cl),
         "Manual phones":            (["external_reference_value", "phone"],
@@ -1289,9 +1542,14 @@ def main():
     p(f"  W5  other plans:         {len(w5)} (inc {len(prov_add)} Add-to-Plannr)")
     p(f"  W6  premiums:            {len(w6_prem)}")
     p(f"  W6  valuations:          {len(w6_val)} ({len(zero_blank_val)} at zero/no date)")
-    p(f"  W7  charges:             {len(w7)} ({len(rate_filled)} sec C filled, {len(rate_blank)} omitted)")
+    add_tp_in_w7 = [r for r in add_ch_report if r.get("annual_rate_dec")]
+    p(f"  W7  charges:             {len(w7)} ({len(w7)-len(rate_filled)-len(add_tp_in_w7)} sec A/B, "
+      f"{len(rate_filled)} sec C, {len(add_tp_in_w7)} Add-to-Plannr)")
+    p(f"       Add-to-Plannr total: {len(add_ch_report)} ({len(add_ch_report)-len(add_tp_in_w7)} no-rate/Rathbones not in W7)")
     p(f"       high rates >3%:     {len(high_rates)}")
+    p(f"       rate-needed loaded: {len(rate_filled)}, omitted: {len(rate_blank)}")
     p(f"  W8  notes:               {len(w8)} ({rehomed} re-homed, {len(notes_no_cl)} skipped no account)")
+    p(f"  Review entries:          {len(rev_applied)} applied, {len(rev_unapplied)} unapplied (see lists)")
     p(f"  Validate W1:             status={val['status']}, errors={val['error_count']}")
     p("=" * 68)
 
