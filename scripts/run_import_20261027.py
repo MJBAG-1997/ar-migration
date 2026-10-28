@@ -847,7 +847,8 @@ def main():
         r"C:\dev\AR Migration\exports_20261026",
         "Client Export HFP Migration 2026-10-27.csv",
     )
-    _fix_w7_adviser_uuids(w7_rw, client_map, _client_export)
+    _fix_w7_adviser_uuids(w7_rw, client_map, _client_export,
+                          plan_map=plan_map, w5_fixed_path=w5_rw_fixed)
 
     p("\n=== W7: CHARGES (542 rows) ===")
     if wave_state.get("W7_charges", {}).get("done"):
@@ -1099,12 +1100,15 @@ def _fix_income_amounts(src_path, dst_path):
     return dst_path, is_taxable_rows, salary_emp_rows, type_change_rows, nonindiv_rows
 
 
-def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
-    """Fill blank adviser_uuid on W7 charges using each charge's client's assigned adviser.
+def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path, plan_map=None, w5_fixed_path=None):
+    """Fix W7 charges: fill adviser_uuid, start_date, frequency; correct client/plan mismatches.
 
     client_map maps src_uuid → dest_uuid. We invert it to find the source client for
     each dest client_uuid, then look up their assigned_adviser_uuid in the source export,
     then map that to the destination adviser UUID.
+
+    If plan_map and w5_fixed_path are supplied, also fix charges where client_uuid doesn't
+    match the plan's client (e.g. JISAs charged to parent instead of child).
     """
     SRC_ADVISER_TO_DEST = {
         "db0ab7f5-8e52-4c89-a915-29fefeeca0d4": "1a230fbc-4026-4bd1-851f-18cb55ab19f2",  # Jim
@@ -1129,6 +1133,17 @@ def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
         rows = list(csv.DictReader(f))
     fieldnames = list(rows[0].keys()) if rows else []
 
+    # Build dest_plan_uuid → set(dest_client_uuids) from W5 fixed file + plan_map
+    dest_plan_to_clients: dict = {}
+    if plan_map and w5_fixed_path:
+        with open(w5_fixed_path, newline="", encoding="utf-8-sig") as _pf:
+            for _pr in csv.DictReader(_pf):
+                _src_ext = (_pr.get("external_reference_value") or "").strip()
+                _dest_pu = plan_map.get(_src_ext, "")
+                _cuids   = [c.strip() for c in (_pr.get("client_uuids") or "").split(",") if c.strip()]
+                if _dest_pu and _cuids:
+                    dest_plan_to_clients[_dest_pu] = set(_cuids)
+
     MIG_START_DATE = "2026-11-01"  # first of month after migration date
     DEFAULT_FREQ   = "monthly"     # dominant frequency in source charges (451 vs 45 quarterly)
 
@@ -1136,6 +1151,7 @@ def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
     fallback  = 0
     fixed_start = 0
     fixed_freq  = 0
+    fixed_client = 0
 
     for r in rows:
         if not (r.get("adviser_uuid") or "").strip():
@@ -1156,6 +1172,15 @@ def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
             r["frequency"] = DEFAULT_FREQ
             fixed_freq += 1
 
+        # Correct client_uuid if it doesn't match the plan's owner (e.g. JISA parent→child)
+        if dest_plan_to_clients:
+            dest_pu      = (r.get("plan_uuid") or "").strip()
+            dest_cu      = (r.get("client_uuid") or "").strip()
+            plan_clients = dest_plan_to_clients.get(dest_pu, set())
+            if plan_clients and dest_cu not in plan_clients:
+                r["client_uuid"] = next(iter(plan_clients))
+                fixed_client += 1
+
     with open(w7_rw, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
@@ -1163,7 +1188,8 @@ def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
 
     p(f"  W7 charge fix: {fixed_adv} adviser_uuids filled ({fallback} fell back to Jim); "
       f"{fixed_start} start_dates defaulted to {MIG_START_DATE}; "
-      f"{fixed_freq} frequencies defaulted to {DEFAULT_FREQ}")
+      f"{fixed_freq} frequencies defaulted to {DEFAULT_FREQ}; "
+      f"{fixed_client} client_uuids corrected to match plan owner")
     return fixed_adv
 
 
