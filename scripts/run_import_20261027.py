@@ -1229,8 +1229,9 @@ def _fix_w5_stub_plans(src_path, dst_path):
             "agency_in_your_name_from":   r["agency_in_your_name_from"],
         })
 
-    # ── Pass 2: blank provider + future opened_at (all plans) ────────────────────
+    # ── Pass 2: blank provider, inactive_reason, future opened_at (all plans) ───
     no_prov_count = 0
+    inactive_no_reason_count = 0
     future_date_count = 0
     import datetime as _dt
     today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
@@ -1243,6 +1244,12 @@ def _fix_w5_stub_plans(src_path, dst_path):
         if not (r.get("provider") or "").strip() and not (r.get("provider_uuid") or "").strip():
             r["provider_uuid"] = UNKNOWN_PROV_UUID
             no_prov_count += 1
+
+        # status=inactive with no inactive_reason → default 'other' (Plannr requires it)
+        if (r.get("status") or "").strip().lower() == "inactive" and \
+           not (r.get("inactive_reason") or "").strip():
+            r["inactive_reason"] = "other"
+            inactive_no_reason_count += 1
 
         # Future opened_at → blank it (Plannr requires date ≤ today)
         oa = (r.get("opened_at") or "").strip()
@@ -1263,6 +1270,7 @@ def _fix_w5_stub_plans(src_path, dst_path):
     p(f"  W5 stub fix: {len(changes)} stub plans patched "
       f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled); "
       f"{no_prov_count} blank-provider plans set to provider_uuid=Unknown Provider; "
+      f"{inactive_no_reason_count} inactive plans with no reason set to 'other'; "
       f"{future_date_count} future opened_at dates blanked "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
