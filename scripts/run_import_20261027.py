@@ -869,36 +869,31 @@ def main():
 
     p("\n=== W1-W7 COMPLETE — STOP BEFORE W8 ===")
 
-    # Joint account analysis and W8 notes pre-processing
-    circle_src_map = _build_circle_src_map(dest, IMPORT_DIR, client_map)
+    # W8 prep: build final notes file and save UUID maps
     joint_summary  = _joint_accounts_summary(IMPORT_DIR, client_map)
-    joint_notes    = _prep_w8_joint_notes(IMPORT_DIR, joint_summary)
-    to_circle, to_owner, note_details = joint_notes
-    p(f"  W8 notes pre-processed: {to_circle} to circles, {to_owner} to first owner")
+    w8_total, w8_by_mt, w8_joint_rem, w8_unresolved, w8_vis_fixed = \
+        _prep_w8_notes_final(IMPORT_DIR, joint_summary, client_map, plan_map)
+    _save_uuid_maps(IMPORT_DIR, client_map, plan_map)
 
-    # Confirm all moved notes resolve to a known dest circle
-    circle_notes_resolved   = sum(1 for _, en in note_details
-                                  if _ == "circle"
-                                  for csrc, cval in joint_summary["joint_to_circle_src"].items()
-                                  if cval and cval in circle_src_map)
-    # Simpler: iterate joint_to_circle_src and check how many src_circle_uuids resolved
-    joint_circles_resolved = sum(1 for csrc in joint_summary["joint_to_circle_src"].values()
-                                 if csrc and csrc in circle_src_map)
-    joint_circles_total    = sum(1 for csrc in joint_summary["joint_to_circle_src"].values()
-                                 if csrc)
-    p(f"  Circle map confirmation: {joint_circles_resolved}/{joint_circles_total} "
-      f"joint source circles resolved to dest UUIDs")
-    if joint_circles_resolved < joint_circles_total:
-        unresolved_circles = [csrc for csrc in joint_summary["joint_to_circle_src"].values()
-                              if csrc and csrc not in circle_src_map]
-        p(f"  WARN: {len(unresolved_circles)} source circle UUIDs NOT in circle_src_map: "
-          f"{[c[:8] for c in unresolved_circles[:5]]}")
-        p("  These notes will land on the account owner instead — W8 rewrite will blank their circle_uuid")
+    # Step 1c checks
+    p(f"  W8 notes check:")
+    p(f"    Total rows: {w8_total} (expected 6795)")
+    for mt, cnt in sorted(w8_by_mt.items()):
+        p(f"    model_type={mt!r}: {cnt}")
+    p(f"    Rows on a joint account UUID: {w8_joint_rem} (must be 0)")
+    if w8_unresolved:
+        p(f"    Blank/unresolved UUIDs: {len(w8_unresolved)} "
+          f"({'OK — within grace' if len(w8_unresolved) <= 5 else 'CHECK'})")
+        for u in w8_unresolved[:10]:
+            p(f"      {u['mt']} uuid={u['uuid']!r} ext_ref={u['ext_ref']!r}")
+    else:
+        p(f"    Blank/unresolved UUIDs: 0 (OK)")
+    p(f"    Rows with visible_to_clients=Yes: 0 (fixed {w8_vis_fixed} rows)")
 
     _final_report(client_map, plan_map, wave_counts, grace_report, self_link_report,
                   income_taxable_report, income_salary_report,
                   income_type_changes, income_nonindiv_report,
-                  joint_summary=joint_summary, joint_notes=joint_notes,
+                  joint_summary=joint_summary, joint_notes=(0, 0, []),
                   dest=dest, w5_stub_changes=w5_stub_changes)
 
 
@@ -1631,6 +1626,104 @@ def _joint_accounts_summary(import_dir, client_map):
     }
 
 
+def _prep_w8_notes_final(import_dir, joint_summary, client_map, plan_map):
+    """Build W8_notes_final.csv for W8 submission:
+    - Reads W8_notes.csv (never modified)
+    - Drops circle_uuid column (importer rejects it)
+    - Sets visible_to_clients = 'No' on every row
+    - Notes on joint-type accounts → account_uuid = first individual owner source UUID
+    - Notes on trust/business accounts → unchanged
+    - Writes import_dir/W8_notes_final.csv
+    Returns (total, by_model_type, joint_remaining, unresolved_list, vis_yes_fixed)
+    """
+    notes_path = os.path.join(import_dir, "W8_notes.csv")
+    out_path   = os.path.join(import_dir, "W8_notes_final.csv")
+    if not os.path.exists(notes_path):
+        return 0, {}, 0, [], 0
+
+    joints      = joint_summary["joints"]
+    joint_uuids = set(joints.keys())
+
+    with open(notes_path, newline="", encoding="utf-8-sig") as f:
+        reader   = csv.DictReader(f)
+        src_cols = list(reader.fieldnames)
+        rows     = list(reader)
+    fieldnames = [c for c in src_cols if c != "circle_uuid"]
+
+    redirected    = 0
+    vis_yes_fixed = 0
+
+    for r in rows:
+        if (r.get("visible_to_clients") or "").strip() == "Yes":
+            vis_yes_fixed += 1
+        r["visible_to_clients"] = "No"
+
+        mt   = (r.get("model_type") or "").strip()
+        acct = (r.get("account_uuid") or "").strip()
+        if mt == "account" and acct in joint_uuids:
+            jd = joints[acct]
+            if jd["type"].lower() == "joint":
+                first_owner = jd["owners"][0] if jd["owners"] else None
+                if first_owner:
+                    r["account_uuid"] = first_owner
+                    redirected += 1
+
+    from collections import Counter as _Ctr
+    by_mt = dict(_Ctr(r.get("model_type", "") for r in rows))
+
+    joint_remaining = sum(
+        1 for r in rows
+        if (r.get("account_uuid") or "").strip() in joint_uuids
+        and joints[(r.get("account_uuid") or "").strip()]["type"].lower() == "joint"
+    )
+
+    unresolved = []
+    for r in rows:
+        mt = (r.get("model_type") or "").strip()
+        if mt == "account":
+            acct = (r.get("account_uuid") or "").strip()
+            if not acct or acct not in client_map:
+                unresolved.append({"mt": mt, "uuid": acct,
+                                   "ext_ref": r.get("external_reference_value", "")})
+        elif mt == "plan":
+            pu = (r.get("plan_uuid") or "").strip()
+            if not pu or pu not in plan_map:
+                unresolved.append({"mt": mt, "uuid": pu,
+                                   "ext_ref": r.get("external_reference_value", "")})
+
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+    p(f"  W8 notes final: wrote W8_notes_final.csv ({len(rows)} rows; "
+      f"{redirected} joint notes → first owner; {vis_yes_fixed} visible_to_clients fixed to No)")
+
+    return len(rows), by_mt, joint_remaining, unresolved, vis_yes_fixed
+
+
+def _save_uuid_maps(import_dir, client_map, plan_map):
+    """Persist client_map and plan_map to state/ for cross-machine handover."""
+    import json as _json
+    state_dir = os.path.join(import_dir, "state")
+    os.makedirs(state_dir, exist_ok=True)
+    with open(os.path.join(state_dir, "client_map.json"), "w") as f:
+        _json.dump(client_map, f, indent=2)
+    with open(os.path.join(state_dir, "plan_map.json"), "w") as f:
+        _json.dump(plan_map, f, indent=2)
+    ws_path = os.path.join(state_dir, "wave_state.json")
+    if os.path.exists(ws_path):
+        with open(ws_path) as f:
+            ws = _json.load(f)
+    else:
+        ws = {}
+    ws["W8_notes"] = {"done": False, "file": "W8_notes_final.csv"}
+    with open(ws_path, "w") as f:
+        _json.dump(ws, f, indent=2)
+    p(f"  State saved: client_map ({len(client_map)} UUIDs), "
+      f"plan_map ({len(plan_map)} UUIDs), W8=not started")
+
+
 def _prep_w8_joint_notes(import_dir, joint_summary):
     """Move W8 notes on joint/non-individual accounts:
     - If joint has a matching source circle → set model_type=circle, circle_uuid=src_circle_uuid
@@ -1982,16 +2075,10 @@ def _final_report(client_map, plan_map, wave_counts, grace_report, self_link_rep
                 if missing:
                     p(f"      {jd['entity_name']}: {[m[:8] for m in missing]}")
 
-    if joint_notes:
-        to_circle, to_owner, _ = joint_notes
-        total = to_circle + to_owner
-        p("")
-        p(f"  W8 NOTES PRE-PROCESSED (joint account notes moved before import):")
-        p(f"    {total} notes were on joint/non-individual accounts:")
-        p(f"      {to_circle} moved to owners' circle  (circle_uuid = source circle UUID — resolved by rewrite at W8 run)")
-        p(f"      {to_owner} moved to first owner  (header prepended: '[Note from joint account: ...]')")
-        p(f"    Written to W8_notes_joints_moved.csv — W8_notes.csv is unchanged.")
-        p(f"    When W8 runs, use W8_notes_joints_moved.csv and include circle_src_map in the rewrite uuid_map.")
+    p(f"  W8 NOTES (W8_notes_final.csv — ready for submission):")
+    p(f"    circle_uuid column removed; visible_to_clients=No on all rows")
+    p(f"    joint account notes redirected to first individual owner")
+    p(f"    W8_notes.csv and W8_notes_joints_moved.csv unchanged")
 
     _plans_cleanup_report(dest, plan_map, client_map)
 
