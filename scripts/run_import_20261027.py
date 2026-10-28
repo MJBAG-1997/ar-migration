@@ -1235,6 +1235,9 @@ def _fix_w5_stub_plans(src_path, dst_path):
     future_date_count = 0
     transfer_val_blanked_count = 0
     trustee_details_count = 0
+    sentinel_date_count = 0
+    ret_date_blanked_count = 0
+    term_type_blanked_count = 0
     import datetime as _dt
     today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
 
@@ -1252,6 +1255,22 @@ def _fix_w5_stub_plans(src_path, dst_path):
            not (r.get("inactive_reason") or "").strip():
             r["inactive_reason"] = "other"
             inactive_no_reason_count += 1
+
+        # Sentinel dates (01/01/0001, year < 1900) in any date field → blank them.
+        # .NET DateTime.MinValue serialised from the source; Plannr requires dates >= 1900-01-01
+        # for term/maturity fields. opened_at is also blanked so subsequent cascade rules fire.
+        for _dfld in list(r.keys()):
+            if 'date' not in _dfld and _dfld not in ('opened_at', 'inactive_at', 'review_date'):
+                continue
+            _dval = (r.get(_dfld) or '').strip()
+            if not _dval:
+                continue
+            try:
+                if _dt.datetime.strptime(_dval, '%d/%m/%Y').year < 1900:
+                    r[_dfld] = ''
+                    sentinel_date_count += 1
+            except ValueError:
+                pass
 
         # Future opened_at → blank it (Plannr requires date ≤ today)
         oa = (r.get("opened_at") or "").strip()
@@ -1276,6 +1295,19 @@ def _fix_w5_stub_plans(src_path, dst_path):
             r["protection_policy_trustee_details"] = "Not recorded"
             trustee_details_count += 1
 
+        # pension_retirement_date prohibited when opened_at is blank
+        if not (r.get("opened_at") or "").strip() and \
+           (r.get("pension_retirement_date") or "").strip():
+            r["pension_retirement_date"] = ""
+            ret_date_blanked_count += 1
+
+        # protection_policy_term_type='To Date' requires term_maturity_date — blank term_type
+        # if the maturity date is missing (no date to supply, so remove the conditional trigger)
+        if (r.get("protection_policy_term_type") or "").strip() == "To Date" and \
+           not (r.get("protection_policy_term_maturity_date") or "").strip():
+            r["protection_policy_term_type"] = ""
+            term_type_blanked_count += 1
+
     with open(dst_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
@@ -1287,7 +1319,10 @@ def _fix_w5_stub_plans(src_path, dst_path):
       f"{inactive_no_reason_count} inactive plans with no reason set to 'other'; "
       f"{future_date_count} future opened_at dates blanked; "
       f"{transfer_val_blanked_count} transfer valuation dates blanked (opened_at empty); "
-      f"{trustee_details_count} in-trust policies given default trustee_details "
+      f"{trustee_details_count} in-trust policies given default trustee_details; "
+      f"{sentinel_date_count} sentinel pre-1900 dates blanked; "
+      f"{ret_date_blanked_count} retirement dates blanked (opened_at empty); "
+      f"{term_type_blanked_count} term_types blanked (no maturity date) "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
 
