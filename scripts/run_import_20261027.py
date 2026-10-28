@@ -843,6 +843,11 @@ def main():
         p(f"  GRACE-DROPPED W7_charges: ext_ref={d['ext_ref']} issues={d['issues']}")
         grace_report.append(("W7_charges", d))
     p("  W7_charges rewritten — OK")
+    _client_export = os.path.join(
+        r"C:\dev\AR Migration\exports_20261026",
+        "Client Export HFP Migration 2026-10-27.csv",
+    )
+    _fix_w7_adviser_uuids(w7_rw, client_map, _client_export)
 
     p("\n=== W7: CHARGES (542 rows) ===")
     if wave_state.get("W7_charges", {}).get("done"):
@@ -1092,6 +1097,60 @@ def _fix_income_amounts(src_path, dst_path):
         w.writerows(output_rows)
 
     return dst_path, is_taxable_rows, salary_emp_rows, type_change_rows, nonindiv_rows
+
+
+def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
+    """Fill blank adviser_uuid on W7 charges using each charge's client's assigned adviser.
+
+    client_map maps src_uuid → dest_uuid. We invert it to find the source client for
+    each dest client_uuid, then look up their assigned_adviser_uuid in the source export,
+    then map that to the destination adviser UUID.
+    """
+    SRC_ADVISER_TO_DEST = {
+        "db0ab7f5-8e52-4c89-a915-29fefeeca0d4": "1a230fbc-4026-4bd1-851f-18cb55ab19f2",  # Jim
+        "2153bb3c-7b76-4643-86a3-a9c53acab0b0": "78a6aab8-55f3-42ed-b8ef-4867da1c0c78",  # Katie
+        "5a8bc24f-8ff9-4671-ba49-4a5c8bfc5b2b": "49b93c74-dffa-4abe-8aa7-3e58b62f3375",  # Tommie
+    }
+    JIM_DEST = "1a230fbc-4026-4bd1-851f-18cb55ab19f2"  # fallback for unassigned clients
+
+    # dest_uuid → src_uuid (individual clients only; joint entities won't appear here)
+    dest_to_src = {v: k for k, v in client_map.items()}
+
+    # src_client_uuid → dest_adviser_uuid from the source client export
+    src_client_to_dest_adv = {}
+    with open(client_export_path, newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            src_cuid = (row.get("uuid") or "").strip()
+            src_adv  = (row.get("assigned_adviser_uuid") or "").strip()
+            if src_cuid:
+                src_client_to_dest_adv[src_cuid] = SRC_ADVISER_TO_DEST.get(src_adv, JIM_DEST)
+
+    with open(w7_rw, newline="", encoding="utf-8-sig") as f:
+        rows = list(csv.DictReader(f))
+    fieldnames = list(rows[0].keys()) if rows else []
+
+    fixed = 0
+    fallback = 0
+    for r in rows:
+        if (r.get("adviser_uuid") or "").strip():
+            continue
+        dest_cuid = (r.get("client_uuid") or "").strip()
+        src_cuid  = dest_to_src.get(dest_cuid, "")
+        dest_adv  = src_client_to_dest_adv.get(src_cuid, "")
+        if not dest_adv:
+            dest_adv = JIM_DEST
+            fallback += 1
+        r["adviser_uuid"] = dest_adv
+        fixed += 1
+
+    with open(w7_rw, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        w.writeheader()
+        w.writerows(rows)
+
+    p(f"  W7 adviser fix: {fixed} blank adviser_uuids filled "
+      f"({fallback} fell back to Jim Hoban — no client match)")
+    return fixed
 
 
 def _fix_w5_stub_plans(src_path, dst_path):
