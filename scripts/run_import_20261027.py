@@ -1233,6 +1233,8 @@ def _fix_w5_stub_plans(src_path, dst_path):
     no_prov_count = 0
     inactive_no_reason_count = 0
     future_date_count = 0
+    transfer_val_blanked_count = 0
+    trustee_details_count = 0
     import datetime as _dt
     today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
 
@@ -1262,6 +1264,18 @@ def _fix_w5_stub_plans(src_path, dst_path):
             except ValueError:
                 pass
 
+        # pension_date_of_transfer_valuation prohibited when opened_at is blank
+        if not (r.get("opened_at") or "").strip() and \
+           (r.get("pension_date_of_transfer_valuation") or "").strip():
+            r["pension_date_of_transfer_valuation"] = ""
+            transfer_val_blanked_count += 1
+
+        # protection_policy_in_trust=Yes requires trustee_details — default 'Not recorded'
+        if (r.get("protection_policy_in_trust") or "").strip() == "Yes" and \
+           not (r.get("protection_policy_trustee_details") or "").strip():
+            r["protection_policy_trustee_details"] = "Not recorded"
+            trustee_details_count += 1
+
     with open(dst_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
@@ -1271,7 +1285,9 @@ def _fix_w5_stub_plans(src_path, dst_path):
       f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled); "
       f"{no_prov_count} blank-provider plans set to provider_uuid=Unknown Provider; "
       f"{inactive_no_reason_count} inactive plans with no reason set to 'other'; "
-      f"{future_date_count} future opened_at dates blanked "
+      f"{future_date_count} future opened_at dates blanked; "
+      f"{transfer_val_blanked_count} transfer valuation dates blanked (opened_at empty); "
+      f"{trustee_details_count} in-trust policies given default trustee_details "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
 
