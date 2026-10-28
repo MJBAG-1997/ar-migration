@@ -1229,13 +1229,39 @@ def _fix_w5_stub_plans(src_path, dst_path):
             "agency_in_your_name_from":   r["agency_in_your_name_from"],
         })
 
+    # ── Pass 2: blank provider + future opened_at (all plans) ────────────────────
+    no_prov_count = 0
+    future_date_count = 0
+    import datetime as _dt
+    today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
+
+    for r in rows:
+        # Blank provider → set to name (name is often the provider for manual plans)
+        if not (r.get("provider") or "").strip() and not (r.get("provider_uuid") or "").strip():
+            name_val = (r.get("name") or "").strip()
+            r["provider"] = name_val if name_val else "Not recorded"
+            no_prov_count += 1
+
+        # Future opened_at → blank it (Plannr requires date ≤ today)
+        oa = (r.get("opened_at") or "").strip()
+        if oa:
+            try:
+                d = _dt.datetime.strptime(oa, "%d/%m/%Y").date()
+                if d > _dt.date.today():
+                    r["opened_at"] = ""
+                    future_date_count += 1
+            except ValueError:
+                pass
+
     with open(dst_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
-    p(f"  W5 stub fix: {len(changes)} plans patched "
-      f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled) "
+    p(f"  W5 stub fix: {len(changes)} stub plans patched "
+      f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled); "
+      f"{no_prov_count} blank-provider plans set to name; "
+      f"{future_date_count} future opened_at dates blanked "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
 
