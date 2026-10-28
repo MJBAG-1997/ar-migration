@@ -1236,10 +1236,10 @@ def _fix_w5_stub_plans(src_path, dst_path):
     today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
 
     for r in rows:
-        # Blank provider → set to name (name is often the provider for manual plans)
+        # Blank provider → use "Not recorded" (Plannr validates provider against its database;
+        # using the plan name fails for generic names like "Cash account", "Various", etc.)
         if not (r.get("provider") or "").strip() and not (r.get("provider_uuid") or "").strip():
-            name_val = (r.get("name") or "").strip()
-            r["provider"] = name_val if name_val else "Not recorded"
+            r["provider"] = "Not recorded"
             no_prov_count += 1
 
         # Future opened_at → blank it (Plannr requires date ≤ today)
@@ -1260,7 +1260,7 @@ def _fix_w5_stub_plans(src_path, dst_path):
 
     p(f"  W5 stub fix: {len(changes)} stub plans patched "
       f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled); "
-      f"{no_prov_count} blank-provider plans set to name; "
+      f"{no_prov_count} blank-provider plans set to 'Not recorded'; "
       f"{future_date_count} future opened_at dates blanked "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
