@@ -893,7 +893,7 @@ def main():
                   income_taxable_report, income_salary_report,
                   income_type_changes, income_nonindiv_report,
                   joint_summary=joint_summary, joint_notes=joint_notes,
-                  w5_stub_changes=w5_stub_changes)
+                  dest=dest, w5_stub_changes=w5_stub_changes)
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1236,10 +1236,12 @@ def _fix_w5_stub_plans(src_path, dst_path):
     today_str = _dt.date.today().isoformat()  # YYYY-MM-DD for comparison
 
     for r in rows:
-        # Blank provider → use "Not recorded" (Plannr validates provider against its database;
-        # using the plan name fails for generic names like "Cash account", "Various", etc.)
+        # Blank provider → set provider_uuid to "Unknown Provider" (valid Plannr global provider).
+        # Arbitrary text in the provider field fails for some plan types; the UUID approach works
+        # universally. These plans are flagged in the clean-up list for correct provider assignment.
+        UNKNOWN_PROV_UUID = "175e2a37-200f-400f-8140-e0d7206db1b1"
         if not (r.get("provider") or "").strip() and not (r.get("provider_uuid") or "").strip():
-            r["provider"] = "Not recorded"
+            r["provider_uuid"] = UNKNOWN_PROV_UUID
             no_prov_count += 1
 
         # Future opened_at → blank it (Plannr requires date ≤ today)
@@ -1260,7 +1262,7 @@ def _fix_w5_stub_plans(src_path, dst_path):
 
     p(f"  W5 stub fix: {len(changes)} stub plans patched "
       f"({sum(1 for c in changes if not c['orig_name'])} names auto-filled); "
-      f"{no_prov_count} blank-provider plans set to 'Not recorded'; "
+      f"{no_prov_count} blank-provider plans set to provider_uuid=Unknown Provider; "
       f"{future_date_count} future opened_at dates blanked "
       f"-> wrote {os.path.basename(dst_path)}")
     return dst_path, changes
@@ -1527,10 +1529,183 @@ def _prep_w8_joint_notes(import_dir, joint_summary):
     return to_circle, to_owner, details
 
 
+def _plans_cleanup_report(dest, plan_map, client_map):
+    """Generate the plans clean-up list for tomorrow's update import (do not run now).
+
+    Four items:
+      1. Plans set to provider_uuid=Unknown Provider — audit against 26 Oct export.
+      2. 46 plans whose contract_enquiry_account_uuid was blanked — correct dest user UUIDs.
+      3. 1 investment plan that should be type=pension, sub_type=sipp.
+      4. 21 plans owned by a joint entity — ownership to individual owners.
+
+    Rule 9: plans by count, type, or source UUID only — never by name.
+    """
+    PLAN_EXPORT = os.path.join(
+        r"C:\dev\AR Migration\exports_20261026",
+        "Plan Export HFP Migration 2026-10-27.csv",
+    )
+    UNKNOWN_PROV_UUID = "175e2a37-200f-400f-8140-e0d7206db1b1"
+
+    p("")
+    p("  PLANS CLEAN-UP LIST (update import — do not run now)")
+    p("  " + "─" * 56)
+
+    # ── 1. Unknown Provider audit ─────────────────────────────────────────────
+    # Identify which plans got provider_uuid=Unknown Provider (originally blank prov+uuid)
+    w5_rw = os.path.join(IMPORT_DIR, "W5_plans_rewritten.csv")
+    blank_prov = []            # rows from rewritten CSV where both prov fields were blank
+    if os.path.exists(w5_rw):
+        with open(w5_rw, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                if not (r.get("provider") or "").strip() and \
+                   not (r.get("provider_uuid") or "").strip():
+                    blank_prov.append(r)
+
+    # Load 26 Oct export indexed by source UUID to check for build losses
+    src_plan_prov = {}  # src_uuid → provider string in 26 Oct export
+    if os.path.exists(PLAN_EXPORT):
+        with open(PLAN_EXPORT, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                uid = (r.get("uuid") or "").strip()
+                pv  = (r.get("provider") or "").strip()
+                if uid:
+                    src_plan_prov[uid] = pv
+
+    # Fetch Plannr provider names for name-match count
+    prov_names = set()
+    if dest:
+        try:
+            pg = 1
+            while True:
+                rsp = dest.get("/api/v1/providers", params={"per_page": 500, "page": pg})
+                if rsp.status_code != 200:
+                    break
+                d = rsp.json()
+                for item in d.get("data", []):
+                    nm = (item.get("name") or "").strip()
+                    if nm:
+                        prov_names.add(nm)
+                if pg >= d.get("meta", {}).get("last_page", 1):
+                    break
+                pg += 1
+        except Exception:
+            pass
+
+    by_type = {}
+    build_loss_by_type = {}
+    name_match_count = 0
+    for r in blank_prov:
+        t        = (r.get("type") or "").strip()
+        ext_ref  = (r.get("external_reference_value") or "").strip()
+        plan_nm  = (r.get("name") or "").strip()
+        by_type[t] = by_type.get(t, 0) + 1
+        if src_plan_prov.get(ext_ref):            # had provider in 26 Oct export
+            build_loss_by_type[t] = build_loss_by_type.get(t, 0) + 1
+        if prov_names and plan_nm in prov_names:  # name exactly matches a Plannr provider
+            name_match_count += 1
+
+    total_unknown = len(blank_prov)
+    total_build_loss = sum(build_loss_by_type.values())
+    p("")
+    p(f"  1. provider_uuid → Unknown Provider ({total_unknown} plans)")
+    p(f"     Build loss (had provider in 26 Oct export): {total_build_loss}")
+    p(f"     Plan name exactly matches a Plannr provider: {name_match_count}")
+    if prov_names:
+        p(f"       (Plannr provider list: {len(prov_names)} entries)")
+    p(f"     By type:")
+    for t, cnt in sorted(by_type.items(), key=lambda x: -x[1]):
+        loss = build_loss_by_type.get(t, 0)
+        p(f"       {t:<25}  {cnt:3d} total  {loss:3d} build loss")
+    p(f"     Unknown Provider UUID for update: {UNKNOWN_PROV_UUID}")
+
+    # ── 2. contract_enquiry_account_uuid ─────────────────────────────────────
+    JIM_SRC   = "db0ab7f5-8e52-4c89-a915-29fefeeca0d4"
+    KATIE_SRC = "2153bb3c-7b76-4643-86a3-a9c53acab0b0"
+    JIM_DEST  = "1a230fbc-4026-4bd1-851f-18cb55ab19f2"
+    KATIE_DEST= "78a6aab8-55f3-42ed-b8ef-4867da1c0c78"
+    EMP_MAP   = {JIM_SRC: JIM_DEST, KATIE_SRC: KATIE_DEST}
+    ceq_plans = {JIM_SRC: [], KATIE_SRC: []}
+    if os.path.exists(PLAN_EXPORT):
+        with open(PLAN_EXPORT, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                ceq = (r.get("contract_enquiry_account_uuid") or "").strip()
+                if ceq in EMP_MAP:
+                    src_uuid  = (r.get("uuid") or "").strip()
+                    dest_uuid = plan_map.get(src_uuid)
+                    ceq_plans[ceq].append((src_uuid, dest_uuid))
+    total_ceq = sum(len(v) for v in ceq_plans.values())
+    p("")
+    p(f"  2. contract_enquiry_account_uuid ({total_ceq} plans — blanked during W5 import):")
+    for src_emp, dest_emp in EMP_MAP.items():
+        plans = ceq_plans[src_emp]
+        p(f"     src_employee={src_emp}  →  dest_user={dest_emp}  ({len(plans)} plans)")
+        for src_pl, dest_pl in plans:
+            p(f"       src={src_pl}  dest={dest_pl or 'NOT MAPPED'}")
+
+    # ── 3. investment → pension reclassification ──────────────────────────────
+    FLEXI_SRC  = "prov-042-648-472-IH01853021"
+    flexi_dest = plan_map.get(FLEXI_SRC)
+    p("")
+    p(f"  3. type/sub_type fix (1 plan: type=investment → type=pension, sub_type=sipp):")
+    p(f"     src={FLEXI_SRC}")
+    p(f"     dest={flexi_dest or 'NOT MAPPED'}")
+    p(f"     current: type=investment  sub_type=general_investment_account  provider=Transact")
+    p(f"     target:  type=pension     sub_type=sipp")
+    p(f"     (Transact pension plans in W5: 105×personal_pension_plan, 32×sipp)")
+
+    # ── 4. Joint-entity-owned plans → individual owners ───────────────────────
+    w2_path = os.path.join(IMPORT_DIR, "W2_clients.csv")
+    joint_owners = {}   # src_joint_uuid → [src_owner_uuids]
+    if os.path.exists(w2_path):
+        with open(w2_path, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                if (r.get("type") or "").lower() != "individual":
+                    src = (r.get("external_reference_value") or "").strip()
+                    owners = [o.strip() for o in (r.get("owners") or "").split(",")
+                              if o.strip()]
+                    if src:
+                        joint_owners[src] = owners
+
+    w5_src_path = os.path.join(IMPORT_DIR, "W5_plans.csv")
+    joint_plan_rows = []
+    if os.path.exists(w5_src_path):
+        with open(w5_src_path, newline="", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f):
+                cu    = (r.get("client_uuids") or "").strip()
+                uuids = [u.strip() for u in cu.split(",") if u.strip()]
+                for u in uuids:
+                    if u in joint_owners:
+                        src_pl = (r.get("external_reference_value") or "").strip()
+                        indivs = joint_owners[u]
+                        joint_plan_rows.append({
+                            "src":          src_pl,
+                            "dest":         plan_map.get(src_pl),
+                            "type":         (r.get("type") or "").strip(),
+                            "joint_src":    u,
+                            "owners_dest":  [client_map.get(o, "NOT MAPPED") for o in indivs],
+                        })
+                        break
+
+    by_type_j = {}
+    for jp in joint_plan_rows:
+        t = jp["type"]
+        by_type_j[t] = by_type_j.get(t, 0) + 1
+    type_str = ", ".join(f"{cnt}×{t}" for t, cnt in sorted(by_type_j.items(), key=lambda x: -x[1]))
+    p("")
+    p(f"  4. Joint-entity-owned plans ({len(joint_plan_rows)} plans — ownership → individual owners):")
+    p(f"     By type: {type_str}")
+    p(f"     {'src_plan_uuid':<36}  {'type':<16}  dest_plan_uuid")
+    for jp in joint_plan_rows:
+        dest_str  = jp["dest"] or "NOT MAPPED"
+        p(f"     {jp['src']:<36}  {jp['type']:<16}  {dest_str}")
+        owners_str = ", ".join(jp["owners_dest"])
+        p(f"       → individual owner dest_uuids: {owners_str}")
+
+
 def _final_report(client_map, plan_map, wave_counts, grace_report, self_link_report,
                   income_taxable_report=None, income_salary_report=None,
                   income_type_changes=None, income_nonindiv_report=None,
-                  joint_summary=None, joint_notes=None,
+                  joint_summary=None, joint_notes=None, dest=None,
                   w5_stub_changes=None):
     EXPECTED = [
         ("W2_clients",       84),
@@ -1659,6 +1834,8 @@ def _final_report(client_map, plan_map, wave_counts, grace_report, self_link_rep
         p(f"      {to_owner} moved to first owner  (header prepended: '[Note from joint account: ...]')")
         p(f"    Written to W8_notes_joints_moved.csv — W8_notes.csv is unchanged.")
         p(f"    When W8 runs, use W8_notes_joints_moved.csv and include circle_src_map in the rewrite uuid_map.")
+
+    _plans_cleanup_report(dest, plan_map, client_map)
 
     p("")
     p("  Sample clients for end-to-end check:")
