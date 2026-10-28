@@ -1129,28 +1129,42 @@ def _fix_w7_adviser_uuids(w7_rw, client_map, client_export_path):
         rows = list(csv.DictReader(f))
     fieldnames = list(rows[0].keys()) if rows else []
 
-    fixed = 0
-    fallback = 0
+    MIG_START_DATE = "2026-11-01"  # first of month after migration date
+    DEFAULT_FREQ   = "monthly"     # dominant frequency in source charges (451 vs 45 quarterly)
+
+    fixed_adv = 0
+    fallback  = 0
+    fixed_start = 0
+    fixed_freq  = 0
+
     for r in rows:
-        if (r.get("adviser_uuid") or "").strip():
-            continue
-        dest_cuid = (r.get("client_uuid") or "").strip()
-        src_cuid  = dest_to_src.get(dest_cuid, "")
-        dest_adv  = src_client_to_dest_adv.get(src_cuid, "")
-        if not dest_adv:
-            dest_adv = JIM_DEST
-            fallback += 1
-        r["adviser_uuid"] = dest_adv
-        fixed += 1
+        if not (r.get("adviser_uuid") or "").strip():
+            dest_cuid = (r.get("client_uuid") or "").strip()
+            src_cuid  = dest_to_src.get(dest_cuid, "")
+            dest_adv  = src_client_to_dest_adv.get(src_cuid, "")
+            if not dest_adv:
+                dest_adv = JIM_DEST
+                fallback += 1
+            r["adviser_uuid"] = dest_adv
+            fixed_adv += 1
+
+        if not (r.get("start_date") or "").strip():
+            r["start_date"] = MIG_START_DATE
+            fixed_start += 1
+
+        if not (r.get("frequency") or "").strip():
+            r["frequency"] = DEFAULT_FREQ
+            fixed_freq += 1
 
     with open(w7_rw, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
-    p(f"  W7 adviser fix: {fixed} blank adviser_uuids filled "
-      f"({fallback} fell back to Jim Hoban — no client match)")
-    return fixed
+    p(f"  W7 charge fix: {fixed_adv} adviser_uuids filled ({fallback} fell back to Jim); "
+      f"{fixed_start} start_dates defaulted to {MIG_START_DATE}; "
+      f"{fixed_freq} frequencies defaulted to {DEFAULT_FREQ}")
+    return fixed_adv
 
 
 def _fix_w5_stub_plans(src_path, dst_path):
