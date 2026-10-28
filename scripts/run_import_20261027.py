@@ -732,7 +732,8 @@ def main():
         rw  = os.path.join(IMPORT_DIR, plan_csv.replace(".csv", "_rewritten.csv"))
         unmapped, gd = rewrite_csv(src, rw, combined_map,
                                    ["client_uuids", "visible_to_circles_uuids"],
-                                   soft_fields=["visible_to_circles_uuids"],
+                                   soft_fields=["visible_to_circles_uuids",
+                                                "contract_enquiry_account_uuid"],
                                    grace_limit=GRACE_LIMIT)
         if unmapped:
             p(f"STOP — {len(unmapped)} unmatched UUIDs in {plan_csv}: {unmapped[:5]}")
