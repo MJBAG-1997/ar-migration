@@ -27,37 +27,57 @@ Total: 356 clients, 1901 plans. W8 (6795 notes) awaits explicit go-ahead.
 
 ## W8 notes file — step 1c check results
 
-File to use: `import_20261027/W8_notes_final.csv` (4,262 KB)
+**File to use: `import_20261027/W8_notes_final_v2.csv`** (W8_notes_final.csv superseded — see resolution below)
 
 | Check | Result | Status |
 |---|---|---|
-| Total rows | 6795 | ✓ |
-| model_type=account | 6132 | |
-| model_type=plan | 663 | |
+| Total rows | 6757 | ✓ |
+| Unresolved UUIDs | 0 | ✓ |
 | Rows on a joint account UUID | 0 | ✓ |
-| Rows with visible_to_clients=Yes | 0 (9 fixed) | ✓ |
-| Blank / unresolved UUIDs | **4160** | ✗ |
+| Rows with visible_to_clients=Yes | 0 | ✓ |
 
-**Unresolved UUID detail** — 4160 notes on 6 source UUIDs that are not in client_map (adviser/admin accounts, not imported as clients):
+---
 
-| Source UUID | Notes | Identity |
-|---|---|---|
-| `db0ab7f5-8e52-4c89-a915-29fefeeca0d4` | 2659 | Jim Hoban (adviser) |
-| `6dbac8ff-90d2-4dc8-b60d-26567773a68e` | 899 | Valerie Hoban (admin) |
-| `2153bb3c-7b76-4643-86a3-a9c53acab0b0` | 307 | Katie Hoban (adviser) |
-| `5a8bc24f-8ff9-4671-ba49-4a5c8bfc5b2b` | 293 | Tommie Hoban (adviser) |
-| `bc00b121-9dcc-4283-bcb2-a75697fa249d` | 1 | Unknown (likely deleted account) |
-| `2ce06c3f-6929-49f9-bfcf-946debc81209` | 1 | Unknown (likely deleted account) |
+## W8 notes — staff-account resolution (2026-10-29)
 
-**W8 cannot run until these 4160 rows are resolved.** Options: redirect to a firm-level account UUID, or drop them with a pre-filter. Decision needed before go-ahead.
+The 4,160 rows in W8_notes_final.csv with staff-account UUIDs were resolved by fetching
+`GET /api/v1/client/{uuid}/all-notes` on the source for all 356 migrated clients (W1+W2),
+building a map of source note UUID → source client UUID(s), then applying the rule:
+under one migrated client → use that client's source UUID; under more than one →
+first individual client; under none → drop.
 
-193 joint account notes were redirected to the first individual owner's source UUID (resolved to dest UUID at W8 run time). Trust and business account notes remain on their own account UUIDs. circle_uuid column removed.
+| Metric | Count |
+|---|---|
+| Re-homed (staff UUID → migrated client) | 4122 |
+| Multi-client notes (used first individual) | 2259 |
+| Dropped (not under any migrated client) | 38 |
+| Cross-check disagreements | 0 |
+
+Dropped by staff account UUID:
+
+| Source UUID | Dropped |
+|---|---|
+| `2153bb3c-7b76-4643-86a3-a9c53acab0b0` | 17 |
+| `db0ab7f5-8e52-4c89-a915-29fefeeca0d4` | 9 |
+| `5a8bc24f-8ff9-4671-ba49-4a5c8bfc5b2b` | 7 |
+| `6dbac8ff-90d2-4dc8-b60d-26567773a68e` | 3 |
+| `bc00b121-9dcc-4283-bcb2-a75697fa249d` | 1 |
+| `2ce06c3f-6929-49f9-bfcf-946debc81209` | 1 |
+
+All 38 dropped are model_type=account. They remain in W8_notes.csv (source of truth).
+
+193 joint account notes (in W8_notes_final.csv) were redirected to the first individual
+owner's source UUID. Trust and business account notes remain on their own source UUIDs.
+circle_uuid column removed. All source UUIDs in account_uuid — W8 runner must rewrite
+to dest UUIDs before submission.
 
 ---
 
 ## W8 run rules
 
 - Wait for explicit "go ahead W8" — do not start without it
+- Submit `W8_notes_final_v2.csv` (not W8_notes_final.csv)
+- W8 runner must rewrite source UUIDs → dest UUIDs (client_map + plan_map) before upload
 - Stop at the first failure or unmatched record
 - Never re-submit a wave that may have stored (notes cannot be deleted)
 - Pre-flight: employee list must show exactly 272 W1 clients resolved
@@ -170,7 +190,8 @@ Four items:
 | `state/client_map.json` | 29 KB | src→dest client UUIDs (356 entries) |
 | `state/plan_map.json` | 157 KB | src→dest plan UUIDs (1901 entries) |
 | `state/w1_client_uuid_map.json` | 22 KB | W1 individual client map (legacy) |
-| `W8_notes_final.csv` | 4,262 KB | W8 submission file |
+| `W8_notes_final_v2.csv` | ~4,250 KB | **W8 submission file** (staff notes resolved) |
+| `W8_notes_final.csv` | 4,262 KB | Previous version — superseded, keep for reference |
 | `W8_notes.csv` | 4,267 KB | Original notes (reference only) |
 | All W1–W7 source CSVs | — | Not needed for W8 but keep for re-checks |
 
