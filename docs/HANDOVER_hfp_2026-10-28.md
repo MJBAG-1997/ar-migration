@@ -70,6 +70,70 @@ Seven were created on migration day (2026-10-28) or today; one dates from June 2
 
 ---
 
+## Reconciliation 2026-10-29 (`scripts/reconcile_20261029.py`)
+
+### Check 1 — Notes: total count and source refs
+
+`GET /api/v1/client/{uuid}/all-notes` does **not** return `external_reference_company`/`external_reference_value` in the note object. The note keys are: `account, author_name, contents, created_at, edited, is_pinned, notable, notable_type, path, type, updated_at, uuid, visible_to_clients`. Source ref matching is impossible via this endpoint.
+
+| Metric | Result |
+|---|---|
+| Dest notes total | 6,861 |
+| W8 file submitted | 6,757 |
+| Extra notes | **104** — from 3 notes store jobs on 2026-10-27 |
+| Source refs found in dest | 0 (ext-ref not in API) |
+| Notes with no data_migration ref | 6,861 (all — API limitation) |
+| Duplicate source refs | 0 (cannot assess) |
+
+C1: 15 dest vs 9 in v2 = **+6 extra** from Oct-27 imports.
+C6: 148 dest vs 147 in v2 = **+1 extra** from Oct-27 imports.
+
+### Check 2 — Note dates
+
+Cannot do per-note date comparison: external references not exposed by API, so dest notes cannot be matched to v2 source rows.
+
+Source (v2 CSV) date range: **2022-04-12 to 2026-10-26**.
+
+Dest note date range not computed (no matching basis).
+
+### Check 3 — Duplicates by type
+
+`/api/v1/client/{uuid}/relationships` → HTTP 404 for every client (correct endpoint unknown).
+`/api/v1/client/{uuid}/income-and-employment` → HTTP 404 for every client (correct endpoint unknown).
+External references not returned by circles or dependants list endpoints either.
+
+| Type | Dest | Expected | Delta | Twins |
+|---|---|---|---|---|
+| circles | 89 | 87 | **+2** | cannot identify (no ext-ref in API) |
+| relationships | unknown | 147 | unknown | endpoint 404 |
+| dependants | 498 | 249 | **+249** (2×) | cannot pair (no ext-ref) |
+| income | unknown | 316 | unknown | endpoint 404 |
+| valuations | 1,525 | 1,526 | **−1** | plan `d8cc1c33` returned HTTP 502 during fetch |
+| charges | 542 | 542 | 0 | ✓ |
+
+### Check 4 — Dependant duplicate pairs
+
+All 249 duplicates confirmed by count (498 = 2×249), but individual pairs cannot be listed: the `/api/v2/dependants` endpoint does not return external_reference fields. Correct Plannr endpoint or UI-based approach needed to identify which of each pair to delete.
+
+### Check 5 — Expenditure: 2,381 source rows vs 114 dest fields
+
+Dest expenditure form has **23 fields** (from GET /api/v1/expenditure-structure/section). Source export has **182 distinct (section, type) combinations**.
+
+| Category | Count |
+|---|---|
+| Custom — (section, type) not in dest 23-field form | **2,229** |
+| Amount ≤ 0 (skipped) | **34** |
+| No dest client UUID | **0** |
+| Overwritten (later row same client+field) | **4** |
+| Written (last write for client+field, dest non-zero confirmed by check 9) | **114** |
+| Total | **2,381** |
+
+114 writes × 1 field each = 114 non-zero dest fields on 69 clients (matching check 9 result). 4 overwrites = 4 additional POST calls whose values were replaced = 118 total POST calls (matching the "118 records" in the state table). 19 source clients had only custom or zero rows → 0 fields written for them.
+
+The 2,229 custom rows (93.6%) are granular line items (e.g. "Essential - Home / Council Tax", "Essential - Vehicles / Car Insurance") that do not match any of the 23 fixed fields in the destination expenditure form. They were silently skipped at import. Client data exists in the source export but is not held in the destination system.
+
+---
+
 ## Post-W8 read-only checks (2026-10-29)
 
 ### Check 6 — Import history (GET /api/v1/import)

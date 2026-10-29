@@ -1,0 +1,1036 @@
+=== RECONCILIATION 2026-10-29 ===
+
+  client_map: 356, plan_map: 1901, v2: 6757 rows
+
+=== PART 1+2: NOTES RECONCILIATION ===
+  v2 file: 6757 rows, 6757 unique source refs
+  Probe HTTP 200 — content-type: application/json
+  Response keys: ['data', 'links', 'meta']
+  Note object keys: ['account', 'author_name', 'contents', 'created_at', 'edited', 'is_pinned', 'notable', 'notable_type', 'path', 'type', 'updated_at', 'uuid', 'visible_to_clients']
+  50/356 clients — 1640 notes so far
+  100/356 clients — 2599 notes so far
+  150/356 clients — 3697 notes so far
+  200/356 clients — 4712 notes so far
+  250/356 clients — 5713 notes so far
+  300/356 clients — 6330 notes so far
+  350/356 clients — 6808 notes so far
+  356/356 clients — 6861 notes so far
+
+  Total dest notes: 6861
+  Expected (v2 file): 6757
+  Unique source refs: 0
+  Notes with no data_migration ref: 6861
+  Source refs appearing more than once: 0
+
+  In v2 but no dest note:  6757
+  In dest but not in v2:   0
+
+  C1 (587bbc91…):
+    Total dest notes: 15  expected: 9
+    Notes matching v2 ref:  0
+    Notes not in v2 (extra from earlier runs): 0
+    Notes with no data_migration ref:          15
+    Notes that are duplicates of a v2 ref:     0
+
+  C6 (26697c8a…):
+    Total dest notes: 148  expected: 147
+    Notes matching v2 ref:  0
+    Notes not in v2 (extra from earlier runs): 0
+    Notes with no data_migration ref:          148
+    Notes that are duplicates of a v2 ref:     0
+
+=== PART 2: NOTE DATES ===
+  Date comparison (v2 source dates vs dest dates):
+    Same date:                0
+    Day and month swapped:    0
+    Set to import date (Oct 27-29 2026): 0
+    Other difference:         0
+    No dest note found:       6757
+
+  Source (v2 CSV) dates:
+    Earliest: 2022-04-12
+    Latest:   2026-10-26
+
+=== PART 3: DUPLICATES BY TYPE ===
+
+  circles:
+    Dest total: 89  Expected: 87
+    by ext_ref: records with key: 0  without: 89
+    Duplicate groups: 0  extra records (twins): 0
+    [WARN] GET /api/v1/relationships → HTTP 404
+
+  relationships: global returned 0 — fetching per client…
+    [WARN] GET /api/v1/client/f3890327-a428-4a29-9f08-60408e199371/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3e971d9f-7f2b-4574-bb89-0be5946c5a8c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/92aa84ed-8c34-433a-b5eb-a24258ffd822/relationships → HTTP 404
+    [WARN] GET /api/v1/client/04f6a424-c33f-4ace-942b-4203d648c3ff/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1334e42c-896a-4d4f-a2ad-b0a6753b96b1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/08bd84e7-09d8-42f0-af6c-ca916ceeb404/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6395894a-fc3c-4f94-8f42-213f821e832a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a64b2152-e1c9-47f9-9bb9-0822adda4e85/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f222968a-74f7-449d-8689-5dfd07c93f8f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/dd624653-26c3-46d2-9691-24de69def739/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0bed1139-407b-4552-96f8-b201942266b6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/64d5e606-e46b-4880-9ce5-2f47da8335bf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6e825365-9620-4964-ae1d-f00aa076543e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f05abc88-f7b2-444b-ad6f-eff7ec569822/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d9eba7e9-1f71-47b8-8a14-b9cd9d328055/relationships → HTTP 404
+    [WARN] GET /api/v1/client/501721cf-be68-425a-9da3-bed119ddf451/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5507ba16-4c68-4783-ab64-3192268cd75c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/cf633e49-cc6d-4fa2-89ae-03d2cfe8d505/relationships → HTTP 404
+    [WARN] GET /api/v1/client/bbe433f3-69e6-46cc-a29c-d55fc0afe42a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1a521fe8-b79d-4509-9a73-4b3de3968e49/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9df13cc4-fba9-4199-9772-e0a9de737890/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0dfb36e1-51d3-4cb6-ad56-d4bdfbfb0d96/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1f2226ae-2168-4491-be0e-baf1f3ec046a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1f76c5a1-ccbc-44c2-a3f4-50376176f38d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a61469c-277c-4267-8ec7-f81a619d5d6f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/87a583f2-141b-4eed-8646-c578b7ce0938/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c5052bc5-1a6c-4857-bf81-bce8603bb8a9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/16aab7d7-20d0-4296-8af7-011de27bce1c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/28d4cb78-e940-446c-85bb-6e3e51dd2ba0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/84a7065f-3a41-4127-a217-7b318c9dbc0b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2b61be42-def4-4569-8a57-03112f047c70/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ed17a935-feb4-4011-b7db-3b9575932acc/relationships → HTTP 404
+    [WARN] GET /api/v1/client/102a3e80-f94e-41dc-9aac-7e834cb3d332/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2ec4a9da-2792-46ba-a49f-3760664c88ff/relationships → HTTP 404
+    [WARN] GET /api/v1/client/095e4821-c12e-439d-aa59-a3ff3768cacd/relationships → HTTP 404
+    [WARN] GET /api/v1/client/423e2bd0-a375-4a53-93d9-25bf9d480db9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a0e1d32-b65f-46dd-a6ea-94c9b8614a74/relationships → HTTP 404
+    [WARN] GET /api/v1/client/21a7a7ca-be06-4364-a770-5b9d0f0012e1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1c646a18-a64b-4278-ac75-1165a37ef5a4/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6440c14b-1576-4e3c-b3b3-835defc3d706/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f9173617-ecaa-49f4-9587-d36e9f0dfd5a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/26046c8d-dd7c-449c-8814-fe98e8137f9f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/280a46d5-d203-4170-84ec-89b1cea48b90/relationships → HTTP 404
+    [WARN] GET /api/v1/client/26026390-37b5-4159-9186-e9fa1897f4ab/relationships → HTTP 404
+    [WARN] GET /api/v1/client/eaea5a59-1a8d-4e69-b32e-735d536f61df/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8b8c501e-6311-41e7-b748-d0921d3c9425/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f128515d-3c80-42a3-b53b-1bf1ffea4ef9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/27f1b426-024b-4afd-b49d-b415a427bbc5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a6c54551-b585-4754-b57b-dd35e28cf7d0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5b30278d-3884-4b1e-9d0c-c4dabfc7366f/relationships → HTTP 404
+    50/356 — 0 so far
+    [WARN] GET /api/v1/client/c52d27d1-b0f4-4b0c-8669-312d8cac6f27/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d5da3e7c-e7b3-4a98-bba8-9acbfd7b8d4a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b6e2d058-0a24-4560-8a9f-106d7c81cd6a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/651f484a-fd0c-4c59-8c88-bcf99beb052b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4982cb5e-05b5-40cd-9b3e-cd5a04358106/relationships → HTTP 404
+    [WARN] GET /api/v1/client/71aefcee-3217-41f4-a08c-e535a50d58cc/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9b4ad97d-2101-407a-96ff-af3334731629/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c8e1d492-b902-41f9-b46a-c2ef4f582573/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fb35eee7-2c7d-4f07-9b6b-e0512de51edf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/01701d67-06b0-4f14-aca4-459ff7ae98f9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c782109e-afc9-4957-abdd-4519a69e1788/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2fcf4d3a-767d-4d9c-bf37-ce839cb29216/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0be6bb04-712f-476e-9d99-acefbf60f6e9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/bc95ec0c-a598-4f82-b4e4-c35e29d2f246/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d8403824-0e52-4a2b-ab64-3be0cde531e6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/afa64181-6f3b-4cbe-8f15-84a62c19bdbb/relationships → HTTP 404
+    [WARN] GET /api/v1/client/79efd368-759a-4688-b232-605baddc786b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/464c2108-af99-4a41-85f2-54679277f127/relationships → HTTP 404
+    [WARN] GET /api/v1/client/645f3795-e7ea-4adc-b9a8-7adf0c9ef381/relationships → HTTP 404
+    [WARN] GET /api/v1/client/20790f39-8fc2-402d-bcf6-54e2e1f74fb7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7f5078f1-b161-483a-aca6-9747d0c1e9ab/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a11cd1c2-e43c-4e30-b26e-c6ea88c33c7f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3c51797f-f4f6-4595-8511-6190eef94822/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fb56d4c5-81cf-4dc2-8e35-55b3d819bc17/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6f43b05b-aa12-450b-a619-829231feec64/relationships → HTTP 404
+    [WARN] GET /api/v1/client/88163a08-e134-45da-ae0e-fdb5bcac2eec/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3dbe0e92-7227-45cd-82e8-8c96e28639bf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/52ca1e3e-3c80-4f58-b17a-c7d42656c38f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3f5e9726-0844-406d-a328-03ef18d7ca52/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a53266de-2c91-48ad-8516-76c0ee78f48a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e707ff05-4c0e-44cb-8947-054635e63323/relationships → HTTP 404
+    [WARN] GET /api/v1/client/468f05dd-df69-48ff-8caf-021251c7787d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9391315c-65bf-4883-8a9d-4073f3dc5253/relationships → HTTP 404
+    [WARN] GET /api/v1/client/99436131-2b76-4811-b749-bb0f41547616/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5179a899-bec0-44e2-962b-4d0644719ba7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a7cfe402-e21c-439d-8c7b-f87d0df497db/relationships → HTTP 404
+    [WARN] GET /api/v1/client/683fb09b-bf72-4b9f-9039-a9a17913be73/relationships → HTTP 404
+    [WARN] GET /api/v1/client/700b5e76-1b7d-4fc8-9643-c35202e81623/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5cee4f57-15de-4241-99a2-dc6cc3a446b2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f9ff00ec-c061-4716-b5d3-ea8dae838d48/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ba4f2d6d-1dc1-4f4b-bbe5-fd3acb8cfc18/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ebce985f-42c9-4fe7-a976-ed7a1089dfaa/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f6be3185-9e18-4910-9bc8-89edc910ae52/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c4fbdf37-dc31-4678-b2cf-dad751ec55d5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f30249b6-8b49-40ed-9c20-d243a0151a56/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7de64cd0-ca73-48b8-8415-920cc37946ce/relationships → HTTP 404
+    [WARN] GET /api/v1/client/46f26a74-189d-449b-842b-e9af6aeb28e1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/05e4f1be-08ef-4409-a94d-68f86ac60a59/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9994b43a-27a6-4f27-8a13-eedfe60c5378/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fc1b390e-be68-4c56-8781-70249a947d8a/relationships → HTTP 404
+    100/356 — 0 so far
+    [WARN] GET /api/v1/client/bbc8c1e6-a14e-4da3-9852-47adcefe62f8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3331cecb-9bd3-4bc0-ac77-9ee6f4aea69b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a9794df-12a7-4097-934e-4a45693180c8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3b61802c-50ff-4a43-b948-61109e9fb54e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/54fd6256-473c-476a-8e58-55d25d6f57d7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/19cdb450-0e8e-4a44-9d22-db24118bc591/relationships → HTTP 404
+    [WARN] GET /api/v1/client/06264cb1-b866-4ef7-bd3e-e9f931d4dca8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/897e95e5-01de-42aa-8573-0ed3683a778d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e7240348-9571-47d2-9acf-d2028cb4bbc6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/43e35136-c1e1-4dc5-a25f-f4f669535e7f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b386efe9-8a26-4978-8b56-7a8ea01aac13/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fa2be7fe-e8bd-44d3-99f7-dd97485d08e2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/150197c8-0b6b-4fb2-9090-cef75f3d52c6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3954bffb-07b2-46f8-a348-8d815241384d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f295c149-0086-44e8-bea8-da37c31c2794/relationships → HTTP 404
+    [WARN] GET /api/v1/client/77a4a8ce-eb2a-4493-96d3-d4629f59b248/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f475def7-f689-4de6-a51e-4e63dca0c3bf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/06f10cf3-b5f7-462c-a0a6-0a5c3871052c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/06d458b0-4594-49f1-9bea-3cd9531ab548/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5eed7400-5e92-4ab8-b912-87e0352bfc74/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9b7fda74-2eb0-4336-bf20-1e8cb65bd476/relationships → HTTP 404
+    [WARN] GET /api/v1/client/733ce96d-e36f-45ba-b88b-013abc5a9a18/relationships → HTTP 404
+    [WARN] GET /api/v1/client/49d4010e-016e-4a59-a07f-dfc7b3f646d5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1b1fa010-4d95-408a-8680-fc8d09574d0b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7c6cadf1-cda8-4800-a108-971d397a3da4/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c9209935-9f0b-4fae-8e2e-67bf264eed54/relationships → HTTP 404
+    [WARN] GET /api/v1/client/63b28b38-8099-4857-a6ca-2748a715f978/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5264a048-5169-45f5-a3d0-7fb4f6edefc2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4bba7c06-8816-450b-a81f-520e245157c7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5ac97f95-685d-4031-8c29-65fb1b2aa336/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0579da84-e504-40fd-9acd-92e6b06a4184/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c15597a7-4713-4606-9569-e8ee8c6224f3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ac1c259a-0548-4a2c-bd44-896cfa9cc0e0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/574cb609-c80f-4272-bd87-ef42ce233bcd/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a8e581a1-de4e-4ea6-a624-1909c12a3d14/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d2ef7c74-1cb1-4ffe-ab4c-7131c72708cf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/dcead64a-4ee6-492b-8d02-3a94212c73d4/relationships → HTTP 404
+    [WARN] GET /api/v1/client/bbb881cf-acf7-4bf2-a823-aabe0dcfc264/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a8a5547c-9131-42ec-9ea0-f70ba16e1d79/relationships → HTTP 404
+    [WARN] GET /api/v1/client/815f37e4-e11b-40d7-9f42-dde0810b7c3f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/85b1f3f7-0841-4c28-a849-cb6cdbda47c0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/11a0df48-44f2-4eb7-bd87-1bd09c2ac440/relationships → HTTP 404
+    [WARN] GET /api/v1/client/66f971e7-3b2f-47c9-aae1-f5221cbb5aee/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b0223622-85fa-4362-b4ea-92dbf6f63aec/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e3f64537-ad07-41c4-aefd-6a982f673822/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5d2d28aa-9322-4f47-a68c-f80b64932d8b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a1b7da84-47cc-4e51-a29a-1d009b306744/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d28ab7f4-908d-40e7-909e-6984818540c5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1982b95f-b303-43aa-a14d-f2e6bbe0fadd/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d8dbe181-990e-4352-a862-09fdfd7ab8d4/relationships → HTTP 404
+    150/356 — 0 so far
+    [WARN] GET /api/v1/client/ba192fdc-f8d3-4fe2-a1c7-9a7d14fa005b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ccc4e7ea-1a77-4968-a340-1f538c287be0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a4bc686d-6668-4325-aafa-797fbc7268d9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/af7b2c6f-6dc4-42b6-a97c-85677776ec65/relationships → HTTP 404
+    [WARN] GET /api/v1/client/91dd36ee-ee04-4d7e-98be-14771ec9f0d6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/17d4629b-8bf7-4d2d-9151-a072191ad955/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b130ae36-efa4-4a19-8e15-df71ae88cc94/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a05c772-8e71-45d3-a09b-90d3948e70df/relationships → HTTP 404
+    [WARN] GET /api/v1/client/63791cae-c1a8-4c16-9e6b-a041604e752a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ab18a8f6-4cdb-4c3f-945c-c2b767b887df/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6e36038d-cdf4-4d9c-ac82-eb0c3b73b222/relationships → HTTP 404
+    [WARN] GET /api/v1/client/cd2b7dbb-405a-48f6-8728-85d436ba3886/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9e8520af-5a19-4f7f-a5d2-670ebaf3f182/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e80e9ea7-5316-4e77-a081-fe6b288e69c1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a5ff75f2-2a53-4177-b615-3fe6dc94164a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2755a861-95da-4f94-a2de-37a7a4018bea/relationships → HTTP 404
+    [WARN] GET /api/v1/client/435df8fc-61f2-4d6e-8567-33bfcb3e2b62/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9cfca51b-5aa2-4c99-bb9e-b759e09c3f55/relationships → HTTP 404
+    [WARN] GET /api/v1/client/048d8f1a-3115-4dfc-ad58-c3a1b297b416/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2fe00a15-3bf9-42b5-aa82-8e6d46f3b638/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7034471e-01ec-4d2f-a604-692898192d30/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ea599b54-5474-4ab9-b0fe-3611955165cf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/84d13e0a-2847-4e1f-bfc3-bbbc4da0006f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/eb64f188-392e-4011-962b-07649d11e408/relationships → HTTP 404
+    [WARN] GET /api/v1/client/08830a7b-f233-4a49-a1fb-5641ee0e5bf4/relationships → HTTP 404
+    [WARN] GET /api/v1/client/87e6dbe6-1fda-4480-99fb-1a79b50583db/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d1e76aab-559d-4a30-a1b6-e11c1f74a37f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e1546d66-a693-4e2c-b1ac-f8d1a4be98a5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ff1df7e3-74ac-4872-bf59-d852553f17d9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a70d895f-4af4-4a7a-aec4-bc9e00177da9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/cd428123-ecc5-4bab-88ed-87bbcc7cf79e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/01295c43-6385-4da9-9084-8b4ee003e7aa/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c62f060d-2b41-42af-ac60-498b4e92f62d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4c586c41-c014-4c30-a7d8-a29469ca7693/relationships → HTTP 404
+    [WARN] GET /api/v1/client/eccd8e0b-de57-4b12-94e1-3f27be303dd2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d5280a34-6a2c-4a53-9ab2-ce42fb6ac755/relationships → HTTP 404
+    [WARN] GET /api/v1/client/55e45576-0f6c-4efa-bc79-9ab0fe6201ee/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b23b804f-a0f7-4d3f-a31d-1c0c811932a8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a598e1a7-151a-4cb6-a774-caaf918ef7b5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c0ea084f-3f34-4885-a836-335b06403404/relationships → HTTP 404
+    [WARN] GET /api/v1/client/28b8492a-2fe0-4c36-8802-c3c649521581/relationships → HTTP 404
+    [WARN] GET /api/v1/client/39801686-74fe-4685-99b8-a0f6fa5f45d3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e866f26a-3c49-4202-8fef-0766e4318e4e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/53085744-beec-4df7-a7a6-17773465db8e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/532c0cc7-c9e1-4256-b335-48c2465a24fe/relationships → HTTP 404
+    [WARN] GET /api/v1/client/02d8ae52-7f8c-46b2-aae6-144b6d8ca9e0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d364a4e7-4c57-4f25-901d-aeeed241e2cf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/93a4bb0c-35f2-41d7-badd-6e4d9b1561b7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/26b14496-a4f6-43aa-ad3e-fd0774f4314d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/35c5acda-0e49-425c-abee-8f4301684e20/relationships → HTTP 404
+    200/356 — 0 so far
+    [WARN] GET /api/v1/client/cae145f2-c5df-4fa9-9b59-d664529d501d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2b393078-dafa-4503-90e7-b6d8e0bab745/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9428d3d8-308b-4244-b84a-3f07ce1306a3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c38f7487-438f-4292-a6c3-9e2a5345b24c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/75a18b59-d190-4586-a1d8-31638f19c78f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fd90f307-8b38-43d4-b294-3b91c8d13691/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ed6f728d-d107-4162-b082-9a5eeeef254b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2e4e0355-2898-4160-b02a-9689daf4d9f9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/806cdf4b-63c4-4d29-9afa-49db887b970a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5d797787-a3f2-4282-8dd2-1a192d5007d6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/17c26751-b6ef-40f5-a120-d897b5cb0010/relationships → HTTP 404
+    [WARN] GET /api/v1/client/aa2c139e-3786-4ab0-8346-bbce7e0bf072/relationships → HTTP 404
+    [WARN] GET /api/v1/client/47d03055-1dc8-417c-9e92-a7a9c8ffbe76/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6086ba34-33f5-4297-bafe-8791e7537eb0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/06c19b8a-7437-4e38-ab0c-4b92268b0272/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fdd15eab-2ef8-4725-9c3a-bd9e597cf90a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ede6a583-3b43-4b57-b9e3-2bb2b0934a8c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/72dcdf20-cb6a-48be-93c5-a6ac1a658707/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c8896187-8c10-42f2-b541-c6c7566ef2d3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e989d62f-8cc6-480d-88c8-29ca516d7a42/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6209b911-c7a1-4223-865d-02229abd9bec/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0d5999d3-a692-4c93-ae0e-30c8d8b1fb3b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/faaffd9f-8c68-4d73-95db-8d41bf4f5f25/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2a6ffe66-6bb8-4da3-89ba-80373b0434db/relationships → HTTP 404
+    [WARN] GET /api/v1/client/50e682e5-7bc7-41b0-9440-df6fcfb015bc/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4594b6b0-a7db-46b4-aa0e-2436563e075c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1be16092-d7bc-4fa5-bf95-3c83bd468b53/relationships → HTTP 404
+    [WARN] GET /api/v1/client/209bf47a-af83-473a-b132-d7174836cb3f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7770a6b6-9a7c-4d8e-b4d1-1d00e81a0c2f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/52a5b584-a964-4908-bdc2-71680fe47bed/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f16a5402-81c3-48b5-b310-f43a5a11c911/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6e15b248-cdf8-4be0-8ca9-70e5b389dd5f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/26697c8a-e94b-4eeb-b021-d338793e63f7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/28cfd18c-89ca-421e-bfff-47e4db249198/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1590ae69-e05e-4c58-a00d-baa6b81e0431/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9417567b-cc52-4276-a1be-b06028b17556/relationships → HTTP 404
+    [WARN] GET /api/v1/client/547e3a60-fc1f-4e1c-b530-537be64ff6ce/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f39dab26-f40f-46d5-b713-6f8f98a5e7e9/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9ea49cf0-0909-4830-8498-4b7ca3c05be1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0d6d2841-3be1-4a0e-9a48-e1f96a8c4daf/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2e79ed51-59d2-4eff-975d-9667503c5d33/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a27bbf6-1325-4cdf-8aab-061ba83976fa/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ded5abca-edd7-4fa5-a911-170d5d726575/relationships → HTTP 404
+    [WARN] GET /api/v1/client/85f6a51e-e54d-4b47-b5c5-54ec3fb15e4d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f6fcb3f5-0b01-4a1e-959e-b6cd9537d019/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b78e6c20-c984-40e2-8c07-de3aab8485f7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/921997d1-3866-496e-a5fe-ef7744a1c0e8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3e06334f-3e97-4b63-a246-70e83c98a35c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d504d78f-3b87-4c8d-a6b8-db6075b021f5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c80da0e1-f368-4d66-b97a-6d88bd27e736/relationships → HTTP 404
+    250/356 — 0 so far
+    [WARN] GET /api/v1/client/4da2889f-a121-4684-a0d5-bdfa62c91d41/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ec8140ca-8c1a-457c-b50d-4d4c2f2d86c2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e65dbc5d-dac9-4fb1-ac86-d90744175559/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7fe7ce8f-6381-4190-a827-a2f8b587f760/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d315464d-24f1-41dc-ac71-d2c632bebcc3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0e5b8999-eff1-4e89-9b99-4f5bada57108/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ae8616df-952a-42e7-a6fb-4be351370d35/relationships → HTTP 404
+    [WARN] GET /api/v1/client/26fc0039-8601-4e5d-967d-5853ead90b4a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a1b56bc7-c0c5-4388-9510-c21126967a88/relationships → HTTP 404
+    [WARN] GET /api/v1/client/78ea93e1-b3f1-4b18-9f9d-969f1f411df2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4310e16c-76f2-411a-a385-88d3a129afe7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1f07fb50-b872-454c-a72e-fb0bb51fc497/relationships → HTTP 404
+    [WARN] GET /api/v1/client/603fa259-a895-4a08-8da3-979ca8eb919f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/573246e0-e0a4-49a9-a159-cd45b0d3e0f5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4fc2e779-2c5b-486b-b242-21be9806593c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1397a5d7-3528-45ca-b6e9-f0a12c3e5053/relationships → HTTP 404
+    [WARN] GET /api/v1/client/9eab42b4-c3a3-4c90-bc3d-f27075981f44/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e892222a-3c69-4956-a38a-b3ad95a8883c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1ea215af-4a70-46f5-939d-86a2ac5afc1a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/acaac591-e442-42d5-aef3-01e92e0ea82a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/acf59c81-6b58-473c-ad5b-7366c5f391ff/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4568f150-59e1-4b4c-91a8-a5e9970e3b90/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8e33ab25-698e-4ba6-90e7-0695b0b9262e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4f9f64b1-73bc-4aff-9f92-f8a1abc75c3c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/214f86f9-5cdf-4f4e-8c8a-50386f660121/relationships → HTTP 404
+    [WARN] GET /api/v1/client/56dc8d5d-ff8d-490f-9f13-e0b07ced90c1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/6e93ac50-c1c8-471c-9861-572d3f2ac7a7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/92ff8e51-e31f-47c4-b746-70799430c2c7/relationships → HTTP 404
+    [WARN] GET /api/v1/client/31b62b2b-a5fc-4b45-86ef-1fde749f5798/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5879aa53-a13b-459f-9d03-0b0e28341cc4/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0f309839-2d0b-4fc5-8c8a-4c8d9c85a84a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/af217272-a7cf-4dff-8496-23a12db21164/relationships → HTTP 404
+    [WARN] GET /api/v1/client/24960367-d51d-473e-bb95-251b927c36d6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5ac8f25d-05b4-49f2-951e-1b589dacf635/relationships → HTTP 404
+    [WARN] GET /api/v1/client/84bb9a2a-5b77-420c-896c-de3c9b79b6fa/relationships → HTTP 404
+    [WARN] GET /api/v1/client/38c661b4-0287-47e9-989f-3afaba7adc5f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/680b3df6-84e7-46b9-ae4e-fa646316698d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/69d8996c-a9da-4fcb-b947-241911383f69/relationships → HTTP 404
+    [WARN] GET /api/v1/client/00d83f14-5db7-418f-87f7-71648a0d0a55/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a830441c-670f-44f4-84bc-73152b560fd2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c425bbc3-d845-41a8-bb09-c409b6890b6d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d0c81087-078f-4781-9858-9ec2a6a64168/relationships → HTTP 404
+    [WARN] GET /api/v1/client/dadc97d2-e736-451e-b49d-cb1554048a7e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f574e5dc-ded6-4d37-8b81-c8932d7d0b12/relationships → HTTP 404
+    [WARN] GET /api/v1/client/04af8e84-83c4-4712-be8e-6b0862200109/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c7ab529b-5410-4c46-a08d-17c6e796bfef/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e03c2367-3777-4b00-b805-dc6ea79361cc/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4a49555d-ba63-4757-aa17-b339ad3de423/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ae940cf4-6b0e-4fc8-a0dc-ce73ca3e73fa/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a6f94a59-767c-4cf3-9349-d8cb5d6fc07b/relationships → HTTP 404
+    300/356 — 0 so far
+    [WARN] GET /api/v1/client/30b72291-c21a-47bd-b445-a057a82acbe2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/485075d7-a4d5-4e98-971f-8251c607c697/relationships → HTTP 404
+    [WARN] GET /api/v1/client/068a946a-9a71-4971-9985-6c8f40838d53/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d31e9368-dd38-4cda-8aef-b6041888e414/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2b02fc69-d811-4cfa-a85c-2eb740b167f0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8de98bb0-6829-48fd-a0d0-2df74ba4910f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8cfb3431-2be9-4c67-847c-27b543c36dcd/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d9edd9a0-36fb-479e-a2b7-82f06cbee310/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8d2e2170-3bd7-49e6-b343-1dc7e26dc17f/relationships → HTTP 404
+    [WARN] GET /api/v1/client/af6b4085-873b-4baf-a2e6-02d9552aa6d3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0b8a69b3-ce58-463a-a25f-f826a0e331c1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/1aa9dad6-cd25-4129-a65d-bf36b5448dbc/relationships → HTTP 404
+    [WARN] GET /api/v1/client/ebe456a1-f206-4ff1-9e56-ff11f79c2269/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c4f53594-79cd-4f85-9544-a1c537670fec/relationships → HTTP 404
+    [WARN] GET /api/v1/client/8b7f8f13-3c60-4114-b29a-59b4cbffcbc3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c96fb18f-50e8-44a7-b2c3-4d96ad2923ba/relationships → HTTP 404
+    [WARN] GET /api/v1/client/587bbc91-6c99-4114-a6c0-8416c3a68cb6/relationships → HTTP 404
+    [WARN] GET /api/v1/client/25313a30-2b7e-4a47-9b39-7469c23d5371/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b0935bea-90a7-4f5c-af97-fad4dd314c3c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2827b764-5139-457a-9412-023d650410f0/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c3bf3c09-c234-4d96-9876-143793eaf081/relationships → HTTP 404
+    [WARN] GET /api/v1/client/85801218-fffc-42c3-ab14-c3f4592daeab/relationships → HTTP 404
+    [WARN] GET /api/v1/client/fde6e72a-db94-4761-8df9-a601675ea15d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/23d0dbc8-8878-438a-8f9d-508465b5795c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/e3f7207a-a7c4-446a-ad66-a2739600457e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f791db7c-05fd-4523-95de-748669929595/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b79fcb18-705a-4ac7-83b9-52ba86f88f40/relationships → HTTP 404
+    [WARN] GET /api/v1/client/4cdf8f8a-198c-4f7b-b5be-5f6082fb623a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/91ae251f-66fe-4134-b9cf-37d3a37afa13/relationships → HTTP 404
+    [WARN] GET /api/v1/client/41d9fe89-b0bc-469b-a98a-80caf01dbb4a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2717447e-4c4a-49a4-9be0-e6fa9e79aed8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/2828247b-abb2-454a-ba47-6f7d610b8025/relationships → HTTP 404
+    [WARN] GET /api/v1/client/b3236b31-ffcf-4fae-a780-49ba4ab46c3b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/58642236-2ee8-456e-b6ac-43b2c8f2a904/relationships → HTTP 404
+    [WARN] GET /api/v1/client/f3837a0b-85a8-4eaa-ae14-3105a8d6119e/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7ca2bbc7-081b-4edd-b386-5128634029db/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a8a45686-7b02-46a2-9af5-39179bc5e139/relationships → HTTP 404
+    [WARN] GET /api/v1/client/051c11ff-9993-4bc8-9963-82722dd87b27/relationships → HTTP 404
+    [WARN] GET /api/v1/client/67c1f7e0-67f6-4a16-9fd2-ba2c1cd27a3d/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3be7445d-7b9a-4e07-8561-2e110e6ed6ef/relationships → HTTP 404
+    [WARN] GET /api/v1/client/5736b6e0-1368-4e26-8af8-be77e67264f5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/53182e19-9c31-46c7-9b74-a8673e132158/relationships → HTTP 404
+    [WARN] GET /api/v1/client/711b494c-2396-46fb-b269-5cb47c9f12e5/relationships → HTTP 404
+    [WARN] GET /api/v1/client/d2e681a7-9317-4322-8fb7-57a1aff1b85c/relationships → HTTP 404
+    [WARN] GET /api/v1/client/0fb8b989-16c3-4dcb-8969-8e35c4554634/relationships → HTTP 404
+    [WARN] GET /api/v1/client/bc05d4b7-f0fd-4f45-906f-547edae1e391/relationships → HTTP 404
+    [WARN] GET /api/v1/client/820a0178-7c00-4a23-8361-53f82a5dca1b/relationships → HTTP 404
+    [WARN] GET /api/v1/client/a20b5b1c-dfb9-4cf3-bd06-eb93c45e1341/relationships → HTTP 404
+    [WARN] GET /api/v1/client/16e7471f-bd5a-4440-92aa-c4086391e8b1/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c9200396-7ea8-47b9-aa3e-9648647d79e5/relationships → HTTP 404
+    350/356 — 0 so far
+    [WARN] GET /api/v1/client/06550252-391b-40c0-834f-f6f9bca8f65a/relationships → HTTP 404
+    [WARN] GET /api/v1/client/167f018d-235d-4801-b6bf-8926a7203bc8/relationships → HTTP 404
+    [WARN] GET /api/v1/client/7df3cc98-f50e-422c-80d4-a130cf19b9b2/relationships → HTTP 404
+    [WARN] GET /api/v1/client/c9c97f6b-81e0-4d19-8ca2-cd05421d8c80/relationships → HTTP 404
+    [WARN] GET /api/v1/client/3b65978b-4635-4161-8bf9-345ad82ac8c3/relationships → HTTP 404
+    [WARN] GET /api/v1/client/813720c4-4f89-4689-9322-fe0bdea3fc7c/relationships → HTTP 404
+
+  relationships:
+    Dest total: 0  Expected: 147
+
+  dependants:
+    Dest total: 498  Expected: 249
+    by ext_ref: records with key: 0  without: 498
+    Duplicate groups: 0  extra records (twins): 0
+
+  income: fetching per client…
+    [WARN] GET /api/v1/client/f3890327-a428-4a29-9f08-60408e199371/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3e971d9f-7f2b-4574-bb89-0be5946c5a8c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/92aa84ed-8c34-433a-b5eb-a24258ffd822/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/04f6a424-c33f-4ace-942b-4203d648c3ff/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1334e42c-896a-4d4f-a2ad-b0a6753b96b1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/08bd84e7-09d8-42f0-af6c-ca916ceeb404/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6395894a-fc3c-4f94-8f42-213f821e832a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a64b2152-e1c9-47f9-9bb9-0822adda4e85/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f222968a-74f7-449d-8689-5dfd07c93f8f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/dd624653-26c3-46d2-9691-24de69def739/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0bed1139-407b-4552-96f8-b201942266b6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/64d5e606-e46b-4880-9ce5-2f47da8335bf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6e825365-9620-4964-ae1d-f00aa076543e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f05abc88-f7b2-444b-ad6f-eff7ec569822/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d9eba7e9-1f71-47b8-8a14-b9cd9d328055/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/501721cf-be68-425a-9da3-bed119ddf451/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5507ba16-4c68-4783-ab64-3192268cd75c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/cf633e49-cc6d-4fa2-89ae-03d2cfe8d505/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/bbe433f3-69e6-46cc-a29c-d55fc0afe42a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1a521fe8-b79d-4509-9a73-4b3de3968e49/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9df13cc4-fba9-4199-9772-e0a9de737890/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0dfb36e1-51d3-4cb6-ad56-d4bdfbfb0d96/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1f2226ae-2168-4491-be0e-baf1f3ec046a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1f76c5a1-ccbc-44c2-a3f4-50376176f38d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a61469c-277c-4267-8ec7-f81a619d5d6f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/87a583f2-141b-4eed-8646-c578b7ce0938/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c5052bc5-1a6c-4857-bf81-bce8603bb8a9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/16aab7d7-20d0-4296-8af7-011de27bce1c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/28d4cb78-e940-446c-85bb-6e3e51dd2ba0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/84a7065f-3a41-4127-a217-7b318c9dbc0b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2b61be42-def4-4569-8a57-03112f047c70/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ed17a935-feb4-4011-b7db-3b9575932acc/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/102a3e80-f94e-41dc-9aac-7e834cb3d332/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2ec4a9da-2792-46ba-a49f-3760664c88ff/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/095e4821-c12e-439d-aa59-a3ff3768cacd/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/423e2bd0-a375-4a53-93d9-25bf9d480db9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a0e1d32-b65f-46dd-a6ea-94c9b8614a74/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/21a7a7ca-be06-4364-a770-5b9d0f0012e1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1c646a18-a64b-4278-ac75-1165a37ef5a4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6440c14b-1576-4e3c-b3b3-835defc3d706/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f9173617-ecaa-49f4-9587-d36e9f0dfd5a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/26046c8d-dd7c-449c-8814-fe98e8137f9f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/280a46d5-d203-4170-84ec-89b1cea48b90/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/26026390-37b5-4159-9186-e9fa1897f4ab/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/eaea5a59-1a8d-4e69-b32e-735d536f61df/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8b8c501e-6311-41e7-b748-d0921d3c9425/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f128515d-3c80-42a3-b53b-1bf1ffea4ef9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/27f1b426-024b-4afd-b49d-b415a427bbc5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a6c54551-b585-4754-b57b-dd35e28cf7d0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5b30278d-3884-4b1e-9d0c-c4dabfc7366f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c52d27d1-b0f4-4b0c-8669-312d8cac6f27/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d5da3e7c-e7b3-4a98-bba8-9acbfd7b8d4a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b6e2d058-0a24-4560-8a9f-106d7c81cd6a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/651f484a-fd0c-4c59-8c88-bcf99beb052b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4982cb5e-05b5-40cd-9b3e-cd5a04358106/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/71aefcee-3217-41f4-a08c-e535a50d58cc/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9b4ad97d-2101-407a-96ff-af3334731629/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c8e1d492-b902-41f9-b46a-c2ef4f582573/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fb35eee7-2c7d-4f07-9b6b-e0512de51edf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/01701d67-06b0-4f14-aca4-459ff7ae98f9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c782109e-afc9-4957-abdd-4519a69e1788/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2fcf4d3a-767d-4d9c-bf37-ce839cb29216/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0be6bb04-712f-476e-9d99-acefbf60f6e9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/bc95ec0c-a598-4f82-b4e4-c35e29d2f246/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d8403824-0e52-4a2b-ab64-3be0cde531e6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/afa64181-6f3b-4cbe-8f15-84a62c19bdbb/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/79efd368-759a-4688-b232-605baddc786b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/464c2108-af99-4a41-85f2-54679277f127/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/645f3795-e7ea-4adc-b9a8-7adf0c9ef381/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/20790f39-8fc2-402d-bcf6-54e2e1f74fb7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7f5078f1-b161-483a-aca6-9747d0c1e9ab/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a11cd1c2-e43c-4e30-b26e-c6ea88c33c7f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3c51797f-f4f6-4595-8511-6190eef94822/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fb56d4c5-81cf-4dc2-8e35-55b3d819bc17/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6f43b05b-aa12-450b-a619-829231feec64/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/88163a08-e134-45da-ae0e-fdb5bcac2eec/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3dbe0e92-7227-45cd-82e8-8c96e28639bf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/52ca1e3e-3c80-4f58-b17a-c7d42656c38f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3f5e9726-0844-406d-a328-03ef18d7ca52/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a53266de-2c91-48ad-8516-76c0ee78f48a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e707ff05-4c0e-44cb-8947-054635e63323/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/468f05dd-df69-48ff-8caf-021251c7787d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9391315c-65bf-4883-8a9d-4073f3dc5253/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/99436131-2b76-4811-b749-bb0f41547616/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5179a899-bec0-44e2-962b-4d0644719ba7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a7cfe402-e21c-439d-8c7b-f87d0df497db/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/683fb09b-bf72-4b9f-9039-a9a17913be73/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/700b5e76-1b7d-4fc8-9643-c35202e81623/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5cee4f57-15de-4241-99a2-dc6cc3a446b2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f9ff00ec-c061-4716-b5d3-ea8dae838d48/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ba4f2d6d-1dc1-4f4b-bbe5-fd3acb8cfc18/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ebce985f-42c9-4fe7-a976-ed7a1089dfaa/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f6be3185-9e18-4910-9bc8-89edc910ae52/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c4fbdf37-dc31-4678-b2cf-dad751ec55d5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f30249b6-8b49-40ed-9c20-d243a0151a56/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7de64cd0-ca73-48b8-8415-920cc37946ce/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/46f26a74-189d-449b-842b-e9af6aeb28e1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/05e4f1be-08ef-4409-a94d-68f86ac60a59/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9994b43a-27a6-4f27-8a13-eedfe60c5378/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fc1b390e-be68-4c56-8781-70249a947d8a/income-and-employment → HTTP 404
+    100/356 — 0 so far
+    [WARN] GET /api/v1/client/bbc8c1e6-a14e-4da3-9852-47adcefe62f8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3331cecb-9bd3-4bc0-ac77-9ee6f4aea69b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a9794df-12a7-4097-934e-4a45693180c8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3b61802c-50ff-4a43-b948-61109e9fb54e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/54fd6256-473c-476a-8e58-55d25d6f57d7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/19cdb450-0e8e-4a44-9d22-db24118bc591/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/06264cb1-b866-4ef7-bd3e-e9f931d4dca8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/897e95e5-01de-42aa-8573-0ed3683a778d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e7240348-9571-47d2-9acf-d2028cb4bbc6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/43e35136-c1e1-4dc5-a25f-f4f669535e7f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b386efe9-8a26-4978-8b56-7a8ea01aac13/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fa2be7fe-e8bd-44d3-99f7-dd97485d08e2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/150197c8-0b6b-4fb2-9090-cef75f3d52c6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3954bffb-07b2-46f8-a348-8d815241384d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f295c149-0086-44e8-bea8-da37c31c2794/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/77a4a8ce-eb2a-4493-96d3-d4629f59b248/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f475def7-f689-4de6-a51e-4e63dca0c3bf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/06f10cf3-b5f7-462c-a0a6-0a5c3871052c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/06d458b0-4594-49f1-9bea-3cd9531ab548/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5eed7400-5e92-4ab8-b912-87e0352bfc74/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9b7fda74-2eb0-4336-bf20-1e8cb65bd476/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/733ce96d-e36f-45ba-b88b-013abc5a9a18/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/49d4010e-016e-4a59-a07f-dfc7b3f646d5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1b1fa010-4d95-408a-8680-fc8d09574d0b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7c6cadf1-cda8-4800-a108-971d397a3da4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c9209935-9f0b-4fae-8e2e-67bf264eed54/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/63b28b38-8099-4857-a6ca-2748a715f978/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5264a048-5169-45f5-a3d0-7fb4f6edefc2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4bba7c06-8816-450b-a81f-520e245157c7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5ac97f95-685d-4031-8c29-65fb1b2aa336/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0579da84-e504-40fd-9acd-92e6b06a4184/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c15597a7-4713-4606-9569-e8ee8c6224f3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ac1c259a-0548-4a2c-bd44-896cfa9cc0e0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/574cb609-c80f-4272-bd87-ef42ce233bcd/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a8e581a1-de4e-4ea6-a624-1909c12a3d14/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d2ef7c74-1cb1-4ffe-ab4c-7131c72708cf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/dcead64a-4ee6-492b-8d02-3a94212c73d4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/bbb881cf-acf7-4bf2-a823-aabe0dcfc264/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a8a5547c-9131-42ec-9ea0-f70ba16e1d79/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/815f37e4-e11b-40d7-9f42-dde0810b7c3f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/85b1f3f7-0841-4c28-a849-cb6cdbda47c0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/11a0df48-44f2-4eb7-bd87-1bd09c2ac440/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/66f971e7-3b2f-47c9-aae1-f5221cbb5aee/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b0223622-85fa-4362-b4ea-92dbf6f63aec/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e3f64537-ad07-41c4-aefd-6a982f673822/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5d2d28aa-9322-4f47-a68c-f80b64932d8b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a1b7da84-47cc-4e51-a29a-1d009b306744/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d28ab7f4-908d-40e7-909e-6984818540c5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1982b95f-b303-43aa-a14d-f2e6bbe0fadd/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d8dbe181-990e-4352-a862-09fdfd7ab8d4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ba192fdc-f8d3-4fe2-a1c7-9a7d14fa005b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ccc4e7ea-1a77-4968-a340-1f538c287be0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a4bc686d-6668-4325-aafa-797fbc7268d9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/af7b2c6f-6dc4-42b6-a97c-85677776ec65/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/91dd36ee-ee04-4d7e-98be-14771ec9f0d6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/17d4629b-8bf7-4d2d-9151-a072191ad955/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b130ae36-efa4-4a19-8e15-df71ae88cc94/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a05c772-8e71-45d3-a09b-90d3948e70df/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/63791cae-c1a8-4c16-9e6b-a041604e752a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ab18a8f6-4cdb-4c3f-945c-c2b767b887df/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6e36038d-cdf4-4d9c-ac82-eb0c3b73b222/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/cd2b7dbb-405a-48f6-8728-85d436ba3886/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9e8520af-5a19-4f7f-a5d2-670ebaf3f182/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e80e9ea7-5316-4e77-a081-fe6b288e69c1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a5ff75f2-2a53-4177-b615-3fe6dc94164a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2755a861-95da-4f94-a2de-37a7a4018bea/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/435df8fc-61f2-4d6e-8567-33bfcb3e2b62/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9cfca51b-5aa2-4c99-bb9e-b759e09c3f55/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/048d8f1a-3115-4dfc-ad58-c3a1b297b416/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2fe00a15-3bf9-42b5-aa82-8e6d46f3b638/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7034471e-01ec-4d2f-a604-692898192d30/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ea599b54-5474-4ab9-b0fe-3611955165cf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/84d13e0a-2847-4e1f-bfc3-bbbc4da0006f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/eb64f188-392e-4011-962b-07649d11e408/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/08830a7b-f233-4a49-a1fb-5641ee0e5bf4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/87e6dbe6-1fda-4480-99fb-1a79b50583db/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d1e76aab-559d-4a30-a1b6-e11c1f74a37f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e1546d66-a693-4e2c-b1ac-f8d1a4be98a5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ff1df7e3-74ac-4872-bf59-d852553f17d9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a70d895f-4af4-4a7a-aec4-bc9e00177da9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/cd428123-ecc5-4bab-88ed-87bbcc7cf79e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/01295c43-6385-4da9-9084-8b4ee003e7aa/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c62f060d-2b41-42af-ac60-498b4e92f62d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4c586c41-c014-4c30-a7d8-a29469ca7693/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/eccd8e0b-de57-4b12-94e1-3f27be303dd2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d5280a34-6a2c-4a53-9ab2-ce42fb6ac755/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/55e45576-0f6c-4efa-bc79-9ab0fe6201ee/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b23b804f-a0f7-4d3f-a31d-1c0c811932a8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a598e1a7-151a-4cb6-a774-caaf918ef7b5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c0ea084f-3f34-4885-a836-335b06403404/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/28b8492a-2fe0-4c36-8802-c3c649521581/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/39801686-74fe-4685-99b8-a0f6fa5f45d3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e866f26a-3c49-4202-8fef-0766e4318e4e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/53085744-beec-4df7-a7a6-17773465db8e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/532c0cc7-c9e1-4256-b335-48c2465a24fe/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/02d8ae52-7f8c-46b2-aae6-144b6d8ca9e0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d364a4e7-4c57-4f25-901d-aeeed241e2cf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/93a4bb0c-35f2-41d7-badd-6e4d9b1561b7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/26b14496-a4f6-43aa-ad3e-fd0774f4314d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/35c5acda-0e49-425c-abee-8f4301684e20/income-and-employment → HTTP 404
+    200/356 — 0 so far
+    [WARN] GET /api/v1/client/cae145f2-c5df-4fa9-9b59-d664529d501d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2b393078-dafa-4503-90e7-b6d8e0bab745/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9428d3d8-308b-4244-b84a-3f07ce1306a3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c38f7487-438f-4292-a6c3-9e2a5345b24c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/75a18b59-d190-4586-a1d8-31638f19c78f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fd90f307-8b38-43d4-b294-3b91c8d13691/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ed6f728d-d107-4162-b082-9a5eeeef254b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2e4e0355-2898-4160-b02a-9689daf4d9f9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/806cdf4b-63c4-4d29-9afa-49db887b970a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5d797787-a3f2-4282-8dd2-1a192d5007d6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/17c26751-b6ef-40f5-a120-d897b5cb0010/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/aa2c139e-3786-4ab0-8346-bbce7e0bf072/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/47d03055-1dc8-417c-9e92-a7a9c8ffbe76/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6086ba34-33f5-4297-bafe-8791e7537eb0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/06c19b8a-7437-4e38-ab0c-4b92268b0272/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fdd15eab-2ef8-4725-9c3a-bd9e597cf90a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ede6a583-3b43-4b57-b9e3-2bb2b0934a8c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/72dcdf20-cb6a-48be-93c5-a6ac1a658707/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c8896187-8c10-42f2-b541-c6c7566ef2d3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e989d62f-8cc6-480d-88c8-29ca516d7a42/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6209b911-c7a1-4223-865d-02229abd9bec/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0d5999d3-a692-4c93-ae0e-30c8d8b1fb3b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/faaffd9f-8c68-4d73-95db-8d41bf4f5f25/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2a6ffe66-6bb8-4da3-89ba-80373b0434db/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/50e682e5-7bc7-41b0-9440-df6fcfb015bc/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4594b6b0-a7db-46b4-aa0e-2436563e075c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1be16092-d7bc-4fa5-bf95-3c83bd468b53/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/209bf47a-af83-473a-b132-d7174836cb3f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7770a6b6-9a7c-4d8e-b4d1-1d00e81a0c2f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/52a5b584-a964-4908-bdc2-71680fe47bed/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f16a5402-81c3-48b5-b310-f43a5a11c911/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6e15b248-cdf8-4be0-8ca9-70e5b389dd5f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/26697c8a-e94b-4eeb-b021-d338793e63f7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/28cfd18c-89ca-421e-bfff-47e4db249198/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1590ae69-e05e-4c58-a00d-baa6b81e0431/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9417567b-cc52-4276-a1be-b06028b17556/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/547e3a60-fc1f-4e1c-b530-537be64ff6ce/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f39dab26-f40f-46d5-b713-6f8f98a5e7e9/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9ea49cf0-0909-4830-8498-4b7ca3c05be1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0d6d2841-3be1-4a0e-9a48-e1f96a8c4daf/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2e79ed51-59d2-4eff-975d-9667503c5d33/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a27bbf6-1325-4cdf-8aab-061ba83976fa/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ded5abca-edd7-4fa5-a911-170d5d726575/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/85f6a51e-e54d-4b47-b5c5-54ec3fb15e4d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f6fcb3f5-0b01-4a1e-959e-b6cd9537d019/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b78e6c20-c984-40e2-8c07-de3aab8485f7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/921997d1-3866-496e-a5fe-ef7744a1c0e8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3e06334f-3e97-4b63-a246-70e83c98a35c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d504d78f-3b87-4c8d-a6b8-db6075b021f5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c80da0e1-f368-4d66-b97a-6d88bd27e736/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4da2889f-a121-4684-a0d5-bdfa62c91d41/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ec8140ca-8c1a-457c-b50d-4d4c2f2d86c2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e65dbc5d-dac9-4fb1-ac86-d90744175559/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7fe7ce8f-6381-4190-a827-a2f8b587f760/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d315464d-24f1-41dc-ac71-d2c632bebcc3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0e5b8999-eff1-4e89-9b99-4f5bada57108/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ae8616df-952a-42e7-a6fb-4be351370d35/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/26fc0039-8601-4e5d-967d-5853ead90b4a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a1b56bc7-c0c5-4388-9510-c21126967a88/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/78ea93e1-b3f1-4b18-9f9d-969f1f411df2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4310e16c-76f2-411a-a385-88d3a129afe7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1f07fb50-b872-454c-a72e-fb0bb51fc497/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/603fa259-a895-4a08-8da3-979ca8eb919f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/573246e0-e0a4-49a9-a159-cd45b0d3e0f5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4fc2e779-2c5b-486b-b242-21be9806593c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1397a5d7-3528-45ca-b6e9-f0a12c3e5053/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/9eab42b4-c3a3-4c90-bc3d-f27075981f44/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e892222a-3c69-4956-a38a-b3ad95a8883c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1ea215af-4a70-46f5-939d-86a2ac5afc1a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/acaac591-e442-42d5-aef3-01e92e0ea82a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/acf59c81-6b58-473c-ad5b-7366c5f391ff/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4568f150-59e1-4b4c-91a8-a5e9970e3b90/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8e33ab25-698e-4ba6-90e7-0695b0b9262e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4f9f64b1-73bc-4aff-9f92-f8a1abc75c3c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/214f86f9-5cdf-4f4e-8c8a-50386f660121/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/56dc8d5d-ff8d-490f-9f13-e0b07ced90c1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/6e93ac50-c1c8-471c-9861-572d3f2ac7a7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/92ff8e51-e31f-47c4-b746-70799430c2c7/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/31b62b2b-a5fc-4b45-86ef-1fde749f5798/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5879aa53-a13b-459f-9d03-0b0e28341cc4/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0f309839-2d0b-4fc5-8c8a-4c8d9c85a84a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/af217272-a7cf-4dff-8496-23a12db21164/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/24960367-d51d-473e-bb95-251b927c36d6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5ac8f25d-05b4-49f2-951e-1b589dacf635/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/84bb9a2a-5b77-420c-896c-de3c9b79b6fa/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/38c661b4-0287-47e9-989f-3afaba7adc5f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/680b3df6-84e7-46b9-ae4e-fa646316698d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/69d8996c-a9da-4fcb-b947-241911383f69/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/00d83f14-5db7-418f-87f7-71648a0d0a55/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a830441c-670f-44f4-84bc-73152b560fd2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c425bbc3-d845-41a8-bb09-c409b6890b6d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d0c81087-078f-4781-9858-9ec2a6a64168/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/dadc97d2-e736-451e-b49d-cb1554048a7e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f574e5dc-ded6-4d37-8b81-c8932d7d0b12/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/04af8e84-83c4-4712-be8e-6b0862200109/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c7ab529b-5410-4c46-a08d-17c6e796bfef/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e03c2367-3777-4b00-b805-dc6ea79361cc/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4a49555d-ba63-4757-aa17-b339ad3de423/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ae940cf4-6b0e-4fc8-a0dc-ce73ca3e73fa/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a6f94a59-767c-4cf3-9349-d8cb5d6fc07b/income-and-employment → HTTP 404
+    300/356 — 0 so far
+    [WARN] GET /api/v1/client/30b72291-c21a-47bd-b445-a057a82acbe2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/485075d7-a4d5-4e98-971f-8251c607c697/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/068a946a-9a71-4971-9985-6c8f40838d53/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d31e9368-dd38-4cda-8aef-b6041888e414/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2b02fc69-d811-4cfa-a85c-2eb740b167f0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8de98bb0-6829-48fd-a0d0-2df74ba4910f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8cfb3431-2be9-4c67-847c-27b543c36dcd/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d9edd9a0-36fb-479e-a2b7-82f06cbee310/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8d2e2170-3bd7-49e6-b343-1dc7e26dc17f/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/af6b4085-873b-4baf-a2e6-02d9552aa6d3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0b8a69b3-ce58-463a-a25f-f826a0e331c1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/1aa9dad6-cd25-4129-a65d-bf36b5448dbc/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/ebe456a1-f206-4ff1-9e56-ff11f79c2269/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c4f53594-79cd-4f85-9544-a1c537670fec/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/8b7f8f13-3c60-4114-b29a-59b4cbffcbc3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c96fb18f-50e8-44a7-b2c3-4d96ad2923ba/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/587bbc91-6c99-4114-a6c0-8416c3a68cb6/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/25313a30-2b7e-4a47-9b39-7469c23d5371/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b0935bea-90a7-4f5c-af97-fad4dd314c3c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2827b764-5139-457a-9412-023d650410f0/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c3bf3c09-c234-4d96-9876-143793eaf081/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/85801218-fffc-42c3-ab14-c3f4592daeab/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/fde6e72a-db94-4761-8df9-a601675ea15d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/23d0dbc8-8878-438a-8f9d-508465b5795c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/e3f7207a-a7c4-446a-ad66-a2739600457e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f791db7c-05fd-4523-95de-748669929595/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b79fcb18-705a-4ac7-83b9-52ba86f88f40/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/4cdf8f8a-198c-4f7b-b5be-5f6082fb623a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/91ae251f-66fe-4134-b9cf-37d3a37afa13/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/41d9fe89-b0bc-469b-a98a-80caf01dbb4a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2717447e-4c4a-49a4-9be0-e6fa9e79aed8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/2828247b-abb2-454a-ba47-6f7d610b8025/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/b3236b31-ffcf-4fae-a780-49ba4ab46c3b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/58642236-2ee8-456e-b6ac-43b2c8f2a904/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/f3837a0b-85a8-4eaa-ae14-3105a8d6119e/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7ca2bbc7-081b-4edd-b386-5128634029db/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a8a45686-7b02-46a2-9af5-39179bc5e139/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/051c11ff-9993-4bc8-9963-82722dd87b27/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/67c1f7e0-67f6-4a16-9fd2-ba2c1cd27a3d/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3be7445d-7b9a-4e07-8561-2e110e6ed6ef/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/5736b6e0-1368-4e26-8af8-be77e67264f5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/53182e19-9c31-46c7-9b74-a8673e132158/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/711b494c-2396-46fb-b269-5cb47c9f12e5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/d2e681a7-9317-4322-8fb7-57a1aff1b85c/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/0fb8b989-16c3-4dcb-8969-8e35c4554634/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/bc05d4b7-f0fd-4f45-906f-547edae1e391/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/820a0178-7c00-4a23-8361-53f82a5dca1b/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/a20b5b1c-dfb9-4cf3-bd06-eb93c45e1341/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/16e7471f-bd5a-4440-92aa-c4086391e8b1/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c9200396-7ea8-47b9-aa3e-9648647d79e5/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/06550252-391b-40c0-834f-f6f9bca8f65a/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/167f018d-235d-4801-b6bf-8926a7203bc8/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/7df3cc98-f50e-422c-80d4-a130cf19b9b2/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/c9c97f6b-81e0-4d19-8ca2-cd05421d8c80/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/3b65978b-4635-4161-8bf9-345ad82ac8c3/income-and-employment → HTTP 404
+    [WARN] GET /api/v1/client/813720c4-4f89-4689-9322-fe0bdea3fc7c/income-and-employment → HTTP 404
+    Dest total: 0  Expected: 316
+    [WARN] GET /api/v1/valuations → HTTP 404
+
+  valuations: global returned 0 — fetching per plan (1901 plans)…
+    200/1901 — 148 so far
+    400/1901 — 318 so far
+    600/1901 — 479 so far
+    [WARN] GET /api/v1/plans/d8cc1c33-14c4-433d-bc3c-28ccd8cd9264/valuations → HTTP 502
+    800/1901 — 651 so far
+    1000/1901 — 797 so far
+    1200/1901 — 972 so far
+    1400/1901 — 1148 so far
+    1600/1901 — 1288 so far
+    1800/1901 — 1476 so far
+
+  valuations:
+    Dest total: 1525  Expected: 1526
+    [WARN] GET /api/v1/charges → HTTP 404
+
+  charges: global returned 0 — fetching per plan…
+    200/1901 — 1 so far
+    400/1901 — 8 so far
+    600/1901 — 87 so far
+    800/1901 — 129 so far
+    1000/1901 — 132 so far
+    1200/1901 — 169 so far
+    1400/1901 — 210 so far
+    1600/1901 — 367 so far
+    1800/1901 — 542 so far
+
+  charges:
+    Dest total: 542  Expected: 542
+
+=== PART 4: DEPENDANT DUPLICATE PAIRS ===
+  Duplicate groups (same source ref): 0
+  Records with no ref: 498
+
+  Total pairs to remove (later of each): 0
+
+=== PART 5: EXPENDITURE ANALYSIS ===
+  Dest expenditure field map: 23 fields
+  Source rows: 2381
+  Fetching dest expenditure for 69 clients to count failures…
+  …checked 25/69
+  …checked 50/69
+
+  Source rows total: 2381
+  Custom (section+type not in dest form):  2229
+  Amount <= 0 (skipped):                   34
+  No dest UUID (client not in client_map): 0
+  Overwritten (later row same client+field): 4
+  Written (last write, API succeeded):     0
+  Failed (last write but dest shows 0):    114
+  Total accounted:  2381
+
+  Custom field names (182):
+    Discretionary / Anne - Monthly Discretionary: 4 rows
+    Discretionary / BE Pension Savings: 1 rows
+    Discretionary / Charities: 4 rows
+    Discretionary / Gifts: 32 rows
+    Discretionary / Insurance Belgium: 1 rows
+    Discretionary / Kids share ISAs: 4 rows
+    Discretionary / Life Assurance Premiums: 31 rows
+    Discretionary / Martin - Monthly Discretionary: 4 rows
+    Discretionary / Other: 1 rows
+    Discretionary / Other Discretionary: 2 rows
+    Discretionary / Other Discretionary Expenditure: 1 rows
+    Discretionary / Rathbones: 1 rows
+    Discretionary / Regulars Savings (ISAs etc.): 39 rows
+    Discretionary / Total Monthly Discretionary Expenditure: 1 rows
+    Essential - Children/Dependents / Childcare: 16 rows
+    Essential - Children/Dependents / Gifts: 29 rows
+    Essential - Children/Dependents / Nursery: 4 rows
+    Essential - Children/Dependents / Other: 4 rows
+    Essential - Children/Dependents / Pocket money: 4 rows
+    Essential - Children/Dependents / School Fees: 6 rows
+    Essential - Children/Dependents / Sean's pocket money: 1 rows
+    Essential - Children/Dependents / Tennis and Sports Lessons: 4 rows
+    Essential - Home / Accountancy fees for PHN and LN: 1 rows
+    Essential - Home / Accountant: 1 rows
+    Essential - Home / Accountant & Legal: 4 rows
+    Essential - Home / Alarm/Security: 22 rows
+    Essential - Home / Alternative destination: 1 rows
+    Essential - Home / Amazon/Paypal General: 1 rows
+    Essential - Home / Appliance cover: 1 rows
+    Essential - Home / BE Bank Account Costs: 1 rows
+    Essential - Home / BUX be trading acc: 1 rows
+    Essential - Home / Baby Food: 1 rows
+    Essential - Home / Boat Storage, Insurance & Estuary License: 1 rows
+    Essential - Home / Boston travel: 1 rows
+    Essential - Home / Car Hire abroad: 1 rows
+    Essential - Home / Car maintenance: 1 rows
+    Essential - Home / Care Fees: 1 rows
+    Essential - Home / Charity: 1 rows
+    Essential - Home / Child Trust Fund: 1 rows
+    Essential - Home / Cleaning and Maintenance: 4 rows
+    Essential - Home / Club Subscription: 1 rows
+    Essential - Home / Community Fees: 1 rows
+    Essential - Home / Council Tax: 82 rows
+    Essential - Home / Credit Card: 1 rows
+    Essential - Home / Critical illness cover: 1 rows
+    Essential - Home / Dependents - N/A: 1 rows
+    Essential - Home / Dog Minder: 1 rows
+    Essential - Home / Electricity: 75 rows
+    Essential - Home / English Heritage: 1 rows
+    Essential - Home / Extra holiday purchase work: 1 rows
+    Essential - Home / Food: 84 rows
+    Essential - Home / Garden Maintenance: 40 rows
+    Essential - Home / Gas: 55 rows
+    Essential - Home / Hairdresser Tracey: 1 rows
+    Essential - Home / Help to Adele (Flo's Mum): 1 rows
+    Essential - Home / Holiday & phone insurance: 1 rows
+    Essential - Home / Holiday purchase work: 1 rows
+    Essential - Home / Home Insurance / Contents: 80 rows
+    Essential - Home / Homeserve: 4 rows
+    Essential - Home / Hotels Italy & elsewhere: 1 rows
+    Essential - Home / Housekeeping / Cleaning: 54 rows
+    Essential - Home / Ins re inheritance tax: 1 rows
+    Essential - Home / Insurance BE house: 1 rows
+    Essential - Home / Insurances: 1 rows
+    Essential - Home / Internet: 59 rows
+    Essential - Home / Italy travel: 1 rows
+    Essential - Home / Life Insurance: 1 rows
+    Essential - Home / Lisa Allowance: 1 rows
+    Essential - Home / Logs for stove: 1 rows
+    Essential - Home / Medical expenses are through the business: 1 rows
+    Essential - Home / Mobile: 81 rows
+    Essential - Home / Monthly income is £4000 - this is covering my expenses - do not wish to take more from the business currently: 1 rows
+    Essential - Home / Mortgage/rent: 55 rows
+    Essential - Home / Motoring expenses are through the business: 1 rows
+    Essential - Home / Nappies: 1 rows
+    Essential - Home / National Trust: 1 rows
+    Essential - Home / Netflix: 1 rows
+    Essential - Home / Other: 4 rows
+    Essential - Home / Other - Essential: 1 rows
+    Essential - Home / Other Essential: 1 rows
+    Essential - Home / Other insurance: 1 rows
+    Essential - Home / Other/Personal: 1 rows
+    Essential - Home / Overall Essential Expenditure: 1 rows
+    Essential - Home / PR week subscription: 1 rows
+    Essential - Home / Pet Drugs: 1 rows
+    Essential - Home / Pets - N/A: 1 rows
+    Essential - Home / Phones: 4 rows
+    Essential - Home / Pilates: 1 rows
+    Essential - Home / Postcode lottery: 4 rows
+    Essential - Home / Property Maintenance: 43 rows
+    Essential - Home / Property tax BE house/flat: 1 rows
+    Essential - Home / RSPCA: 4 rows
+    Essential - Home / Singapore travel: 1 rows
+    Essential - Home / Sofa (int free credit): 1 rows
+    Essential - Home / Spotify: 1 rows
+    Essential - Home / Streaming: 4 rows
+    Essential - Home / TV: 79 rows
+    Essential - Home / TV - Sky: 1 rows
+    Essential - Home / TV LIcence: 1 rows
+    Essential - Home / TV Licence: 2 rows
+    Essential - Home / Total Essential - Dave: 4 rows
+    Essential - Home / Total Essential - Shared: 4 rows
+    Essential - Home / Total Monthly Essential Expenditure: 3 rows
+    Essential - Home / Transport/Train/Taxis: 62 rows
+    Essential - Home / Travel Insurance: 4 rows
+    Essential - Home / Utilities: 4 rows
+    Essential - Home / Vet Fees: 1 rows
+    Essential - Home / Water: 80 rows
+    Essential - Home / Yearly Essential Expenditure: 1 rows
+    Essential - Home / action aid: 1 rows
+    Essential - Home / streaming: 1 rows
+    Essential - Home / travel & car breakdown insurance: 1 rows
+    Essential - Home / work lunches: 1 rows
+    Essential - Medical / Dentist: 57 rows
+    Essential - Medical / Optician: 50 rows
+    Essential - Medical / Other: 1 rows
+    Essential - Medical / Other Medical Expenses: 19 rows
+    Essential - Medical / Private Medical Insurance: 21 rows
+    Essential - Pets / Dog walker: 1 rows
+    Essential - Pets / Grooming: 21 rows
+    Essential - Pets / Other: 4 rows
+    Essential - Pets / Pet Food: 34 rows
+    Essential - Pets / Pet Insurance: 33 rows
+    Essential - Pets / Pets: 1 rows
+    Essential - Vehicles / Car Insurance: 68 rows
+    Essential - Vehicles / Car Tax: 58 rows
+    Essential - Vehicles / Charge for EV: 4 rows
+    Essential - Vehicles / Other: 2 rows
+    Essential - Vehicles / Other Motoring Expenses: 22 rows
+    Essential - Vehicles / PCP/Car Loans: 24 rows
+    Essential - Vehicles / Petrol: 67 rows
+    Essential - Vehicles / Servicing & Repairs: 56 rows
+    Lifestyle / Beauty / Grooming: 63 rows
+    Lifestyle / Book Group: 1 rows
+    Lifestyle / Cigarettes/Tabacco: 12 rows
+    Lifestyle / Clothing: 72 rows
+    Lifestyle / Entertainment, Theatre, Sport etc.: 4 rows
+    Lifestyle / Food, Wine & Other Shopping.: 4 rows
+    Lifestyle / Icloud and various tech: 1 rows
+    Lifestyle / Lottery: 4 rows
+    Lifestyle / Meals and Takeout: 68 rows
+    Lifestyle / Other: 7 rows
+    Lifestyle / Other (2): 1 rows
+    Lifestyle / Other - Lifestyle: 1 rows
+    Lifestyle / Other - Personal: 1 rows
+    Lifestyle / Other Lifestyle: 2 rows
+    Lifestyle / Other major items purchase: 4 rows
+    Lifestyle / Other/Lifestyle: 1 rows
+    Lifestyle / Physio / Stroke rehab: 4 rows
+    Lifestyle / Presents: 1 rows
+    Lifestyle / Social Expenses: 59 rows
+    Lifestyle / Sports / Hobbies: 47 rows
+    Lifestyle / Subscriptions, Memberships & Charities: 4 rows
+    Lifestyle / Tax Return: 1 rows
+    Lifestyle / Total Lifestyle - Dave: 4 rows
+    Lifestyle / Total Lifestyle - Shared: 4 rows
+    Lifestyle / Total Lifestyle Expenditure: 1 rows
+    Lifestyle / Total Lifestyle Monthly Expenditure: 1 rows
+    Lifestyle / Total Monthly Lifestyle Expenditure: 2 rows
+    Lifestyle / Website: 1 rows
+    Lifestyle / Yearly Lifestyle Expenditure: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Bathrooms refurb: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Car: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Christmas Presents: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Dental work: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Family Trip: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Floor refurb: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Gemma's IVF 2026: 4 rows
+    Milestones e.g. World Cruise/House Renovation / House Renovation: 2 rows
+    Milestones e.g. World Cruise/House Renovation / House Renovations 2027: 1 rows
+    Milestones e.g. World Cruise/House Renovation / India: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Jack & Chiara's wedding: 4 rows
+    Milestones e.g. World Cruise/House Renovation / Kids Parties: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Lump Sum / One Off Expenditure: 20 rows
+    Milestones e.g. World Cruise/House Renovation / New York: 1 rows
+    Milestones e.g. World Cruise/House Renovation / New kitchen: 1 rows
+    Milestones e.g. World Cruise/House Renovation / New windows for house: 4 rows
+    Milestones e.g. World Cruise/House Renovation / Other 1: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Other 2: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Other 3: 1 rows
+    Milestones e.g. World Cruise/House Renovation / University shortfalls: 1 rows
+    Milestones e.g. World Cruise/House Renovation / Wills & LPA's: 1 rows
+
+============================================================
+RECONCILIATION COMPLETE
+============================================================
