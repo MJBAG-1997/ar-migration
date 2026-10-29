@@ -5,7 +5,7 @@ Destination account: `ccd7f98b-d6a4-46ad-bab3-242ab42826eb`
 
 ---
 
-## Current state — W1–W7 stored, W8 not started
+## Current state — W1–W8 stored (2026-10-29)
 
 | Wave | Expected | Created | Notes |
 |---|---|---|---|
@@ -13,15 +13,128 @@ Destination account: `ccd7f98b-d6a4-46ad-bab3-242ab42826eb`
 | W2_clients | 84 | 84 | |
 | W2_circles | 87 | 87 | |
 | W3_relationships | 182 | 147 | 35 dropped — see read-only checks below |
-| W3_dependants | 249 | 249 | |
+| W3_dependants | 249 | 249 | stored twice — site total 498, all counts 2× |
 | W3_income | 316 | 316 | |
 | expenditure | — | 118 | |
 | W4_plans | 1 | 1 | |
 | W5_plans | 1900 | 1900 | |
 | W6_valuations | 1526 | 1526 | |
+| W6_premiums | 171 | 0 | **NEVER IMPORTED** — not in import history |
 | W7_charges | 542 | 542 | |
+| W8_notes | 6757 | 6757 | submitted from v2; spot-checks confirm notes present |
 
-Total: 356 clients, 1901 plans. W8 (6795 notes) awaits explicit go-ahead.
+Total: 356 clients, 1901 plans, 6757 notes.
+
+**Premiums gap:** W6_premiums.csv (171 rows, source plan UUIDs) was never submitted. It does not appear in GET /api/v1/import history. Premiums must be imported before sign-off.
+
+**Dependants doubled:** W3_dependants was stored 5 times across two migration days. Site now has 498 dependants (2× expected 249). All spot-check clients are 2×: C1=4, C4=12, C6=4. Duplicates must be removed before sign-off.
+
+---
+
+## W8 run results (2026-10-29)
+
+**Script:** `scripts/run_w8_notes.py`
+**File submitted:** `import_20261027/W8_notes_final_v2_rewritten.csv` (source UUIDs rewritten to dest)
+
+### Pre-check
+
+| Check | Result |
+|---|---|
+| Blank created_at | 0 |
+| Earliest created_at | 01/02/2023 |
+| Latest created_at | 31/10/2025 |
+
+### Submit
+
+- Status: `complete`, errors: 0, failed: 0
+- Importer returns 0 for all row counts (Plannr API quirk — consistent with every other wave)
+- Spot-checks confirm notes are on the destination: C5=174 ✓, C6=148 (147 expected), C1=15 (9 expected)
+- Extras on C1 (+6) and C6 (+1) are likely from 3 earlier "notes store complete" runs on 2026-10-27 already in the import history
+
+### Notes in source fetch but NOT in the file (8)
+
+The all-notes fetch found 6,765 unique note UUIDs; the v2 file has 6,757. The 8 extras were in the source system but absent from the original W8_notes.csv export:
+
+| Note UUID | Created |
+|---|---|
+| `e023e1f4-30b6-464f-9cf7-0331dc17ffa3` | 2024-06-25T15:46:27+01:00 |
+| `3542f738-1973-49f5-8ab6-53089d0ae2e6` | 2026-10-28T11:40:07+00:00 |
+| `2b1a9cc8-1b3f-45ac-9c2f-68f5befefca7` | 2026-10-28T11:40:41+00:00 |
+| `7d41cba6-5af2-4422-bb8b-578fc79d39b8` | 2026-10-28T11:42:53+00:00 |
+| `a13f20bd-3bbb-4263-91a3-3743d3d0c902` | 2026-10-28T11:46:37+00:00 |
+| `06726324-9446-4d03-aa8e-1cf46cca9f85` | 2026-10-28T12:28:45+00:00 |
+| `cdfe3196-4c81-4da8-8055-8cea0bf55d4b` | 2026-10-28T12:29:11+00:00 |
+| `d4992c2a-0c8c-4d04-97d6-f1521ba114fa` | 2026-10-29T10:40:37+00:00 |
+
+Seven were created on migration day (2026-10-28) or today; one dates from June 2024 and was missed in the source export.
+
+---
+
+## Post-W8 read-only checks (2026-10-29)
+
+### Check 6 — Import history (GET /api/v1/import)
+
+101 jobs total. All jobs show 0 for rows/created/failed — Plannr API does not return row counts. Full type+mode+status table is in the script output log. Summary by type × mode stored:
+
+| Type | Stores |
+|---|---|
+| clients | multiple |
+| circles | multiple |
+| relationships | multiple |
+| dependants | 5 |
+| income_and_employment | 1 |
+| plans | multiple |
+| valuations | 1 |
+| charges | 1 |
+| notes | 4 (3 on 2026-10-27, 1 on 2026-10-29) |
+| **premiums** | **0 — never stored** |
+
+### Check 7 — Dependants (GET /api/v2/dependants)
+
+| Client | Expected | Actual |
+|---|---|---|
+| Site total | 249 | 498 (2×) |
+| C1 (`587bbc91`) | 2 | 4 |
+| C4 (`c80da0e1`) | 6 | 12 |
+| C6 (`26697c8a`) | 2 | 4 |
+
+Endpoint `GET /api/v2/dependants?filter[account_uuids]={uuid}` (v2, singular path was wrong in v1 spot-check).
+
+### Check 8 — Premiums (GET /api/v1/plans/{uuid}/premiums)
+
+All 171 plans in W6_premiums.csv checked. Total premiums on destination: **0**. Premiums were never imported (confirmed by import history). W6_premiums.csv uses source plan UUIDs — needs rewrite to dest before submission.
+
+### Check 9 — Expenditure (all clients)
+
+| | Lines | Clients |
+|---|---|---|
+| Source (non-zero) | 1817 | 88 |
+| Destination (non-zero) | 114 | 69 |
+
+All 88 source clients differ. The destination API returns expenditure as a fixed-category form (sections/fields); the source export has one row per granular line item. The counts are structurally incomparable — the 114 dest lines are the non-zero fields in the form, not a count of source categories. 19 clients have 0 non-zero fields in the destination despite having source expenditure. Full per-client list is in the script output.
+
+### Check 10 — Unknown Provider plans
+
+Total plans with "Unknown Provider": **522**
+
+| Plan type | Count | Provider required? |
+|---|---|---|
+| fixed_asset | 205 | no |
+| cash_account | 149 | no |
+| investment | 50 | **yes** |
+| mortgage | 47 | **yes** |
+| pension | 32 | **yes** |
+| protection_policy | 23 | **yes** |
+| group_protection | 8 | no |
+| annuity | 1 | **yes** |
+| general_insurance | 2 | **yes** |
+| loan_credit | 5 | no |
+
+**155 plans with Unknown Provider are types where provider is required.** Thursday clean-up task 1 (previously estimated 429 total — actual is 522).
+
+### Check 11 — under_advice raw API value
+
+602 plans in W5 have `under_advice=no`. The destination API stores these as `False` (Python boolean). The spot-check comparison was showing `actual=` (empty string) because of `str(False or "")` evaluation — that was a script artefact, not a data error.
 
 ---
 
