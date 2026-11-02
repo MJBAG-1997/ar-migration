@@ -1,0 +1,2011 @@
+"""
+Build 'Ed Green - Plannr Import Pack (Gap Review)' from a ceding-CRM export.
+
+Reads:  Ed_Green_Client_Data_-_Draft_v1.xlsx  (ceding CRM export)
+        Plannr_Importer_Templates_08042026.xlsx (Plannr importer contract)
+Writes: Ed_Green_Plannr_Import_Pack_Gap_Review_v1.xlsx
+
+Tabs use exact Plannr template column order plus x_ helper columns at the right.
+Cell colours: RED = mandatory, missing, Ed to complete. AMBER = present but
+needs confirmation / inferred. GREY columns = Beyond-side, Ed ignores.
+BLUE columns = source references and the externalreference migration key; do not edit.
+Dropdown lists and sub_type validity are taken from Plannr_Reference_Data*.xlsx / the
+importer template when present, so they match the destination site.
+
+Re-run against Draft v2 by changing SOURCE below.
+"""
+import re
+import os
+import sys
+import glob
+import difflib
+import subprocess
+
+# Self-bootstrap so it runs under any Python (e.g. plain PowerShell), not only one that
+# already has the data stack installed.
+try:
+    import pandas as pd
+    from openpyxl import Workbook
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "pandas", "openpyxl"])
+    import pandas as pd
+    from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.formatting.rule import FormulaRule
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.comments import Comment
+
+
+def _read_book(path):
+    """Read all sheets of an xlsx; prefer calamine, fall back to openpyxl if it is not installed."""
+    try:
+        return pd.read_excel(path, sheet_name=None, engine="calamine")
+    except Exception:
+        return pd.read_excel(path, sheet_name=None, engine="openpyxl")
+
+# SOURCE can be a FOLDER of the AR's CSV exports, or a combined .xlsx. Pass it as the first
+# command-line argument. A folder is preferred: no 31-char tab-name truncation, no combine step.
+if len(sys.argv) > 1:
+    SOURCE = sys.argv[1]
+elif os.path.isdir("SDA"):
+    SOURCE = "SDA"
+elif os.path.isfile("SDA.xlsx"):
+    SOURCE = "SDA.xlsx"
+else:
+    SOURCE = "SDA"   # errors helpfully below if missing
+TEMPLATES = "Plannr_Importer_Templates_08042026.xlsx"
+GO_LIVE = "2026-06-26"          # charge start date / valuation date
+START_FALLBACK = "2026-01-01"   # plan start where no date_of_sale or date_of_transfer
+REFDATA = "Plannr_Reference_Data*.xlsx"   # Plannr export of provider directory etc. (glob)
+
+
+def _read_csv(path):
+    try:
+        return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        try:
+            return pd.read_csv(path, dtype=str, keep_default_na=False, encoding="latin-1")
+        except pd.errors.EmptyDataError:
+            return pd.DataFrame()
+    except pd.errors.EmptyDataError:
+        return pd.DataFrame()
+
+
+if os.path.isdir(SOURCE):
+    _raw = {}
+    for _fn in sorted(os.listdir(SOURCE)):
+        if _fn.lower().endswith(".csv") and not _fn.startswith("~$"):
+            _raw[os.path.splitext(_fn)[0]] = _read_csv(os.path.join(SOURCE, _fn))
+    if not _raw:
+        sys.exit(f"No CSV files found in folder: {SOURCE}")
+    print(f"reading {len(_raw)} CSV files from folder: {SOURCE}")
+elif os.path.isfile(SOURCE) and SOURCE.lower().endswith((".xlsx", ".xlsm", ".xls")):
+    _raw = _read_book(SOURCE)
+    print(f"reading combined workbook: {SOURCE}")
+else:
+    sys.exit(f"SOURCE not found: '{SOURCE}'. Pass a folder of CSVs or a combined .xlsx as the first argument.")
+
+# Derive the adviser name from the file/sheet prefixes (e.g. "Simon Field_01. ..." -> "Simon Field")
+# so the same script works for any adviser, naming the output and the pack title accordingly.
+def _detect_adviser(names):
+    for _nm in names:
+        _m = re.match(r"^(.+?)_\d{2}[.\-]", str(_nm))
+        if _m and _m.group(1).strip():
+            return _m.group(1).strip()
+    return os.path.splitext(os.path.basename(str(SOURCE).rstrip("/\\")))[0] or "Import"
+
+
+ADVISER = _detect_adviser(list(_raw.keys()))
+_safe = re.sub(r"[^A-Za-z0-9]+", "_", ADVISER).strip("_") or "Import"
+OUT = f"{_safe}_Plannr_Import_Pack.xlsx"
+OUT_BT = f"{_safe}_Plannr_Import_Pack_Business_Trust.xlsx"
+print(f"adviser: {ADVISER}  ->  {OUT}")
+
+
+def _strip_prefix(nm):
+    # drop a leading "<Adviser Name>_" the combined workbook added, leaving "NN. Sheet"
+    return re.sub(r"^.*?_(?=\d{2}[.\-])", "", str(nm)).strip()
+
+
+# Excel truncates sheet names to 31 chars and de-dupes, so exact-name matching is unreliable.
+# Match each source sheet to the internal name the builder expects by a keyword in the
+# (possibly truncated) name, disambiguating the two Income & Expenditure tables by content:
+# the ENTRIES table is the one carrying an 'income_or_expenditure' column.
+def _classify_sheet(nm, df):
+    n = _strip_prefix(nm).lower()
+    cols = {str(c).strip().lower() for c in df.columns}
+    if "income_or_expenditure" in cols:
+        return "24 - Income and Expenditure Ent"
+    pairs = [("person", "01 - Person Clients"), ("business", "02 - Business Clients"),
+             ("trust", "03 - Trust Clients"), ("defined benefit", "05 - Defined Benefit Pensions"),
+             ("db pension", "05 - Defined Benefit Pensions"),
+             ("topup", "06 - Topups and Withdrawals"), ("top up", "06 - Topups and Withdrawals"),
+             ("withdrawal", "06 - Topups and Withdrawals"), ("polic", "04 - Policies"),
+             ("review", "07 - Reviews"), ("vulnerab", "11 - Vulnerabilities"),
+             ("address", "12 - Address History"), ("segment", "13 - Segmentation History"),
+             ("employ", "14 - Employment History"), ("will", "16 - Wills"),
+             ("propert", "18 - Properties"), ("aml", "19 - AML History"),
+             ("need", "22 - Needs and Objectives"), ("objective", "22 - Needs and Objectives"),
+             ("contact", "25 - Client Contact Log"),
+             ("circumstance", "26 - Circumstances and Goals"), ("goal", "26 - Circumstances and Goals"),
+             ("attorney", "15 - Power of Attorney"), ("power of", "15 - Power of Attorney")]
+    for kw, internal in pairs:
+        if kw in n:
+            return internal
+    return None
+
+
+eg = {}
+for _name, _df in _raw.items():
+    _internal = _classify_sheet(_name, _df)
+    if _internal and _internal not in eg:
+        eg[_internal] = _df
+for _needed in ["01 - Person Clients", "02 - Business Clients", "03 - Trust Clients",
+                "04 - Policies", "05 - Defined Benefit Pensions",
+                "06 - Topups and Withdrawals", "07 - Reviews", "11 - Vulnerabilities",
+                "12 - Address History", "13 - Segmentation History",
+                "14 - Employment History", "15 - Power of Attorney", "16 - Wills",
+                "18 - Properties", "19 - AML History", "22 - Needs and Objectives",
+                "24 - Income and Expenditure Ent", "25 - Client Contact Log",
+                "26 - Circumstances and Goals"]:
+    if _needed not in eg:
+        eg[_needed] = pd.DataFrame()
+print("sheets matched:", ", ".join(sorted(k for k in eg if not eg[k].empty)))
+# Robustness: ensure every source column the builders reference (via any row variable, not just
+# the main loop one) exists on every sheet, so a structural difference between AR exports cannot
+# raise KeyError (missing -> blank -> flagged). Container/lookup dicts are excluded.
+try:
+    _self = open(__file__, encoding="utf-8").read()
+    _skip = {"eg", "tp", "COLS", "REQ", "FIRM", "DROPDOWNS", "FREQ", "PM", "PM_NORM",
+             "UNDER", "REVIEW_CADENCE", "REVIEW_CLASS_TO_STATUS", "NUM_TO_INTERNAL",
+             "MEET", "EMPMAP", "_pc", "_refbook", "SHEET_ALIASES"}
+    _refcols = {col for var, col in re.findall(r'(\w+)\["([^"]+)"\]', _self) if var not in _skip}
+    # also harvest snake_case names that appear as plain quoted strings (e.g. columns read via
+    # r[x] inside comprehensions), since over-adding empty columns is harmless but a missing one throws
+    _refcols |= set(re.findall(r'"([a-z][a-z0-9_]{2,})"', _self))
+except Exception:
+    _refcols = set()
+for _k in list(eg):
+    _df = eg[_k].copy()
+    for _c in _refcols:
+        if _c not in _df.columns:
+            _df[_c] = ""
+    eg[_k] = _df
+tp = _read_book(TEMPLATES)
+
+# review-cadence decode for the export's 'classification' code (per AR)
+REVIEW_CADENCE = {"1": "6 Monthly Suitability Reviews", "2": "12 Monthly",
+                  "3": "24 Monthly (legacy)", "4": "No ongoing review agreed",
+                  "1.0": "6 Monthly Suitability Reviews", "2.0": "12 Monthly",
+                  "3.0": "24 Monthly (legacy)", "4.0": "No ongoing review agreed"}
+
+# classification code -> Plannr Tier 2 client status. EDIT HERE if the level/cadence pairing
+# differs. 1 = 6-monthly = Pioneer, 2 = 12-monthly = Navigator, 3 = 24-monthly legacy (no live
+# tier -> left blank and flagged), 4 = no ongoing review = Transactional.
+REVIEW_CLASS_TO_STATUS = {
+    "1": "LEVEL 1 / PIONEER", "1.0": "LEVEL 1 / PIONEER",
+    "2": "LEVEL 2 / NAVIGATOR", "2.0": "LEVEL 2 / NAVIGATOR",
+    "3": "", "3.0": "",                       # 24-monthly legacy - confirm
+    "4": "TRANSACTIONAL", "4.0": "TRANSACTIONAL",
+}
+# classification codes that imply an ongoing review (so a missing ongoing charge is a flag)
+ONGOING_REVIEW_CLASSES = {"1", "1.0", "2", "2.0", "3", "3.0"}
+
+
+# ---------------------------------------------------------------- helpers
+def s(v):
+    """Clean scalar -> string ('' for blank). Fix cp1252 mojibake, trim."""
+    if v is None or (isinstance(v, float) and pd.isna(v)) or pd.isna(v):
+        return ""
+    if isinstance(v, pd.Timestamp):
+        return v.strftime("%Y-%m-%d")
+    v = str(v)
+    for _bad, _good in (("â€“", "-"), ("â€”", "-"), ("â€™", "'"), ("â€˜", "'"),
+                        ("â€œ", '"'), ("â€¦", "..."), ("Â£", "£"), ("Â", ""),
+                        ("â€", '"')):
+        v = v.replace(_bad, _good)
+    v = v.strip()
+    if re.fullmatch(r"-?\d+\.0", v):   # numeric read as float (e.g. 6684610684.0) -> integer text
+        v = v[:-2]
+    return "" if v.lower() in ("nan", "nat") else v
+
+def d8(v):
+    """Date -> YYYY-MM-DD or ''."""
+    v = s(v)
+    if not v:
+        return ""
+    try:
+        return pd.to_datetime(v).strftime("%Y-%m-%d")
+    except Exception:
+        return v  # leave as-is; will amber via validation if needed
+
+def num(v):
+    if v is None or pd.isna(v):
+        return ""
+    try:
+        f = float(v)
+        return int(f) if f == int(f) else round(f, 2)
+    except Exception:
+        return s(v)
+
+def yn(v, yes=("yes", "1", "true", "y", "1.0"), no=("no", "0", "false", "n", "0.0")):
+    t = s(v).lower()
+    if t in yes:
+        return "yes"
+    if t in no:
+        return "no"
+    return ""
+
+FREQ = {"monthly": "Monthly", "annually": "Annually", "quarterly": "Quarterly",
+        "weekly": "Weekly", "single": "One Off", "one off": "One Off",
+        "daily": "Daily", "fortnightly": "Fortnightly", "biannually": "Biannually"}
+
+def freq(v):
+    return FREQ.get(s(v).lower(), s(v))
+
+# ---------------------------------------------------------------- provider directory
+def _pnorm(x):
+    x = str(x).lower().strip()
+    x = x.replace("&", " and ")
+    x = re.sub(r"\b(ltd|limited|plc|llp|uk|group)\b", "", x)
+    x = re.sub(r"[^a-z0-9 ]", " ", x)
+    return re.sub(r"\s+", " ", x).strip()
+
+PROV_EXACT = {}     # normalised name -> (Name, UUID)
+PROV_ROWS = []      # (normalised name, Name, UUID)
+PROV_OK = False
+_refbook = {}
+try:
+    _pf = glob.glob(REFDATA)
+    if _pf:
+        _refbook = _read_book(_pf[0])
+        _pv = _refbook.get("Providers")
+        if _pv is not None:
+            for _, _r in _pv.iterrows():
+                k = _pnorm(_r["Name"])
+                if not k:
+                    continue
+                PROV_ROWS.append((k, str(_r["Name"]), str(_r["UUID"])))
+                if k not in PROV_EXACT:
+                    PROV_EXACT[k] = (str(_r["Name"]), str(_r["UUID"]))
+            PROV_OK = bool(PROV_ROWS)
+        print(f"reference data loaded from {_pf[0]} ({len(PROV_ROWS)} providers)")
+    else:
+        print(f"reference data not found ({REFDATA}) - providers and dropdowns fall back to built-in lists")
+except Exception as _e:
+    print("reference data load failed:", _e)
+
+
+def ref_list(sheet, col, fallback):
+    """Distinct values from a reference sheet column, preserving order; fallback if absent."""
+    df = _refbook.get(sheet)
+    if df is None or col not in df.columns:
+        return fallback
+    out, seen = [], set()
+    for v in df[col].dropna().tolist():
+        t = str(v).strip()
+        if t and t.lower() != col.lower() and t not in seen:
+            seen.add(t); out.append(t)
+    return out or fallback
+
+
+def match_provider(name):
+    """Return (provider_uuid, suggestion_note, matched_exact). uuid only on an exact match."""
+    nm = s(name)
+    if not nm or not PROV_OK:
+        return "", "", False
+    n = _pnorm(nm)
+    if n in PROV_EXACT:
+        return PROV_EXACT[n][1], "", True
+    cands = []
+    if len(n) >= 4:
+        for k, Name, _u in PROV_ROWS:
+            if n in k or k in n:
+                cands.append((difflib.SequenceMatcher(None, n, k).ratio(), Name))
+    if not cands:
+        for k in difflib.get_close_matches(n, [r[0] for r in PROV_ROWS], n=3, cutoff=0.86):
+            cands.append((0.9, next(r[1] for r in PROV_ROWS if r[0] == k)))
+    best = sorted({c[1]: c[0] for c in cands}.items(), key=lambda x: -x[1])[:3]
+    if best:
+        return "", "Provider not matched - closest in directory: " + "; ".join(b[0] for b in best) + " (correct the name or set provider_uuid)", False
+    return "", "Provider '" + nm + "' not in directory - select manually", False
+
+# ---------------------------------------------------------------- template contracts
+def template_cols(name):
+    return [c for c in tp[name].columns if not str(c).startswith("Unnamed")]
+
+def mandatory(howto):
+    ht = tp[howto]
+    fc = [c for c in ht.columns if "field" in str(c).lower()][0]
+    mc = [c for c in ht.columns if "mandatory" in str(c).lower()][0]
+    return set(ht[ht[mc].astype(str).str.strip().str.lower() == "mandatory"][fc])
+
+T = {  # tab -> (template sheet, howto sheet)
+    "Clients": ("Clients Template", "Client How To Use"),
+    "Plans": ("Plans Template", "Plans How To"),
+    "Valuations": ("Valuations", "Valuations How To"),
+    "Premiums": ("Premiums", "Premiums How To"),
+    "Charges": ("Charges", "Charges How To"),
+    "Income & Employment": ("Income & Employment", "Income & Employment How To Use"),
+    "Expenses": ("Expenses", "Expenses How To"),
+    "Notes": ("Notes", "Notes How To"),
+}
+COLS = {k: template_cols(v[0]) for k, v in T.items()}
+MAND = {k: mandatory(v[1]) for k, v in T.items()}
+
+VALID_TITLES = set(ref_list("Titles", "title", list(tp["Client Dropdowns"]["title"].dropna())))
+
+# Valid plan sub_types per type slug, from the importer's Plans Dropdowns (authoritative for
+# import; note the reference data file uses different display strings for some sub_types).
+def _build_subtype_valid():
+    try:
+        pd2 = tp["Plans Dropdowns"]
+    except Exception:
+        return {}
+    cols = list(pd2.columns)
+    out = {}
+    for i, c in enumerate(cols):
+        if str(c).startswith("sub_type") and i > 0:
+            parent = next((str(v).strip() for v in pd2[cols[i - 1]].dropna().tolist()), "")
+            slug = parent.lower().replace(" ", "_")
+            if not slug:
+                continue
+            vals = {str(v).strip().lower() for v in pd2[c].dropna().tolist() if str(v).strip()}
+            out.setdefault(slug, set()).update(vals)
+    return out
+
+SUBTYPE_VALID = _build_subtype_valid()
+
+
+def subtype_note(typ, sub):
+    """Return a flag note if sub is not an accepted Plannr sub_type for this type, else ''."""
+    if not sub or not SUBTYPE_VALID or typ not in SUBTYPE_VALID:
+        return ""
+    if str(sub).strip().lower() in SUBTYPE_VALID[typ]:
+        return ""
+    return f"sub_type '{sub}' is not an accepted Plannr sub-type for type '{typ}' - pick one from the Plans Dropdowns sheet"
+
+
+# Beyond-side (grey) columns per tab — Ed ignores these
+FIRM = {
+    "Clients": {"uuid", "status_uuid", "status_name", "assigned_adviser_uuid",
+                "assigned_administrator_uuid", "assigned_paraplanner_uuid",
+                "introduced_by_uuid", "send_welcome_email", "is_prospect",
+                "prospect_converted_at", "value",
+                "anniversary_review_date", "lead_source", "write_to_whom",
+                "risk_uuid", "risk_level", "risk_level_string", "risk_completed_at",
+                "risk_completed_by", "risk_completed_by_uuid",
+                "risk_assessment_provider", "risk_time_horizon", "groups",
+                "do_not_contact_via_fax", "do_not_contact_via_mail",
+                "do_not_contact_via_sms", "do_not_contact_via_email",
+                "do_not_contact_via_telephone", "do_not_visit", "do_not_market"},
+    "Plans": {"uuid", "client_uuids", "provider_uuid", "seller_uuid", "seller_name",
+              "active_adviser_uuid", "contract_enquiry_account_uuid",
+              "visible_to_circles_uuids", "wrap_uuid", "tags", "on_panel",
+              "show_on_circles", "visible_on_client_portal",
+              "include_in_client_valuation", "is_wrap_product", "is_group_scheme",
+              "originally_sold_by_firm", "linked_policy_numbers",
+              "proposal_reference"},
+    "Valuations": {"plan_uuid", "sub_account_uuid"},
+    "Premiums": {"uuid", "plan_uuid", "transferred_from_plan_uuid",
+                 "transferred_from_plan_type", "transferred_from_plan_sub_type"},
+    "Charges": {"uuid", "plan_uuid", "client_uuid", "adviser_uuid", "premium_uuid",
+                "category", "recurring", "type", "service_type", "tax_exempt",
+                "exclude_from_rmar", "rmar_type", "advice_type",
+                "advice_area_deposit", "advice_area_non_regulated",
+                "advice_area_non_rmar", "advice_area_non_investment_insurance",
+                "advice_area_regulated_mortgage", "advice_area_retail_investment",
+                "advice_area_other_fca_regulated", "advice_area_unknown"},
+    "Income & Employment": {"client_uuid", "employment_uuid"},
+    "Expenses": {"client_uuid", "life_stage_name", "is_custom_expense",
+                 "external_reference_company", "external_reference_value"},
+    "Notes": {"model_type", "account_uuid", "plan_uuid", "risk_uuid", "case_uuid",
+              "task_uuid", "path", "is_pinned", "visible_to_clients",
+              "external_reference_source", "external_reference_value"},
+}
+
+# ---------------------------------------------------------------- product map
+# ceding product -> (type, sub_type, amber_note or None)
+PM = {}
+def pm(prods, typ, sub, note=None):
+    for p in prods:
+        PM[p] = (typ, sub, note)
+
+pm(["Discretionary Fund Management - MPS", "Discretionary Fund Management - Bespoke",
+    "Discretionary Managed", "Discretionary Managed Service",
+    "Discretionary Portfolio Service", "Bespoke Discretionary Investment Portfolio",
+    "Managed Portfolio Service"], "investment", "Discretionary Managed Service")
+pm(["ISA - Stocks and Shares", "ISA Stocks & Shares", "Stocks and Shares ISA",
+    "ISA - Stocks and Shares "], "investment", "ISA (Stocks And Shares)")
+pm(["ISA"], "investment", "ISA (Stocks And Shares)", "Generic 'ISA' - confirm S&S vs Cash")
+pm(["General Investment Account", "General Investment Account (GIA)",
+    "General Investment Account - GIA"], "investment", "General Investment Account")
+pm(["SIPP", "Self Invested Personal Pension", "Self Invested Personal Pension (SIPP)"],
+   "pension", "SIPP")
+pm(["SIPP - Trust Based"], "pension", "SIPP", "Trust-based - confirm sub-type (Family SIPP?)")
+pm(["Personal Pension Plan (PPP)"], "pension", "Personal Pension Plan")
+pm(["Pension"], "pension", "Unknown", "Generic 'Pension' - specify sub-type")
+pm(["Executive Pension Plan"], "pension", "Executive Pension Plan")
+pm(["Small Self Administered Scheme (SSAS)"], "pension", "SSAS")
+pm(["Business Group Personal Pensions"], "pension", "Group Personal Pension")
+pm(["Final Salary"], "pension", "Final Salary Scheme")
+pm(["Investment Bond"], "investment", "Investment Bond")
+pm(["Investment Bond - Offshore", "Offshore Investment Bond", "Offshore Bond",
+    "Premiere Account Offshore Bond"], "investment", "Offshore Bond")
+pm(["Wealth Preservation Account", "Wealth Preservation Trust"], "investment",
+   "Offshore Bond", "CLI Wealth Preservation - bond in trust; confirm")
+pm(["Evolution Bond - Loan Trusts"], "investment", "Offshore Bond",
+   "Utmost Evolution in loan trust - confirm")
+pm(["Discounted Gift Trust"], "investment", "Trust", "DGT - confirm underlying bond type")
+pm(["Unit Trusts OEIC"], "investment", "OEIC / Unit Trust")
+pm(["Enterprise Investment Scheme", "Enterprise Investment Scheme (EIS)"],
+   "investment", "Enterprise Investment Scheme (Requlated)",
+   "Confirm regulated vs non-regulated")
+pm(["Venture Capital Trust (VCT)", "Titan VCT"], "investment",
+   "Venture Capital Trust (Regulated)", "Confirm regulated vs non-regulated")
+pm(["AIM - Investment"], "investment", "AIM Investment Tax Service",
+   "Assumed AIM IHT portfolio - confirm")
+pm(["BPR", "Business Property Relief", "ITS", "IHT Portfolio",
+    "EPS - Estate Planning Service", "Estate Planning (IHT)"], "investment",
+   "Investment Tax Service", "BPR/IHT service - confirm sub-type")
+pm(["Wrap Account"], "investment", "Wrap")
+pm(["Premier Account"], "investment", "Unknown", "Confirm product type")
+pm(["Investment Plan"], "investment", "Unknown", "Generic - specify sub-type")
+pm(["Level Term Assurance"], "protection_policy", "Term Protection (Level)")
+pm(["Term Assurance", "Term Protection"], "protection_policy", "Term Protection")
+pm(["Relevant Life Cover"], "protection_policy", "Relevant Life Policy")
+pm(["Whole of Life"], "protection_policy", "Whole of Life")
+pm(["Flexible Life Plan"], "protection_policy", "Flexible Plan")
+pm(["Lifetime Annuity Plan"], "annuity", "Lifetime Annuity")
+pm(["Pension Annuity"], "annuity", "Pension Annuity")
+# ---- SDA (Steve Dunn) additional products ------------------------------------------
+pm(["Discretionary Fund Management - MPS", "Discretionary Fund Management - Bespoke",
+    "Bespoke Discretionary Investment Portfolio", "Discretionary Portfolio Service (STPS)",
+    "DFM", "DFM - STPS - AIM/IHT", "DFM - STPS - EIS"], "investment",
+   "Discretionary Managed Service")
+pm(["Self Invested Personal Pension (SIPP)"], "pension", "SIPP")
+pm(["Personal Pension Plan (PPP)", "Personal Pension", "Platform Pension"],
+   "pension", "Personal Pension Plan")
+pm(["STPS ISA"], "investment", "ISA (Stocks And Shares)", "STPS ISA - confirm S&S vs cash")
+pm(["Venture Capital Trust (VCT)"], "investment", "Venture Capital Trust (Regulated)",
+   "Confirm regulated vs non-regulated")
+pm(["Onshore Investment Bond"], "investment", "Investment Bond",
+   "Onshore bond - confirm sub-type")
+pm(["Offshore Investment Bond"], "investment", "Offshore Bond")
+pm(["Income Drawdown or Other flexible income product"], "pension", "Income Drawdown",
+   "Confirm drawdown sub-type")
+pm(["Retirement Account", "Retirement Investment Account", "Platform Pension"],
+   "pension", "Personal Pension Plan", "Confirm pension wrapper")
+pm(["Critical Illness: Decreasing Term with Life Cover"], "protection_policy",
+   "Term Protection (Decreasing)", "CIC with life cover - confirm sub-type")
+pm(["Life Cover Lump Sum: Decreasing Term Assurance"], "protection_policy",
+   "Term Protection (Decreasing)")
+pm(["Life Term Assurance"], "protection_policy", "Term Protection",
+   "Confirm level vs decreasing")
+pm(["Income Protection Plan"], "protection_policy", "Income Protection")
+pm(["AIM - Investment"], "investment", "AIM Investment Tax Service",
+   "Assumed AIM IHT portfolio - confirm")
+pm(["Estate Planning Service", "Specialist Tax Portfolio"], "investment",
+   "Investment Tax Service", "IHT/tax service - confirm sub-type")
+pm(["Group Personal Pension Plan", "Group Personal Pension Plan (GPPP)"], "pension",
+   "Group Personal Pension")
+pm(["Enhanced Annuity"], "annuity", "Enhanced Annuity")
+pm(["Pension Annuity"], "annuity", "Pension Annuity")
+pm(["Lifetime Annuity"], "annuity", "Lifetime Annuity")
+pm(["Transferred Policy"], "investment", "Unknown",
+   "Generic 'Transferred Policy' - specify the actual product")
+
+# Deliberately unmapped -> RED + flag:
+NON_PLANS = {"Fee (no product)", "CAP ADJUSTMENT", "Fee"}
+
+# Build a normalised lookup so messy variants (case, trailing space/tab, full stops,
+# '(Ex-Investec)' prefixes, 'STPS' tags) resolve to the same mapping.
+def _prodnorm(p):
+    p = s(p).lower()
+    p = re.sub(r"\(ex-investec\)", "", p)
+    p = p.replace(".", " ").replace("&", " and ")
+    p = re.sub(r"[^a-z0-9 ]", " ", p)
+    return re.sub(r"\s+", " ", p).strip()
+
+
+PM_NORM = {}
+for _k, _v in PM.items():
+    PM_NORM.setdefault(_prodnorm(_k), _v)
+_NONPLAN_NORM = {_prodnorm(x) for x in NON_PLANS}
+
+
+def pm_lookup(prod):
+    """Return ('NONPLAN'|None) or (type, sub, note). Exact first, then normalised."""
+    if prod in NON_PLANS:
+        return "NONPLAN"
+    if prod in PM:
+        return PM[prod]
+    n = _prodnorm(prod)
+    if n in _NONPLAN_NORM:
+        return "NONPLAN"
+    return PM_NORM.get(n)
+
+INCOME_TYPE = [
+    (r"state pension", "Pension"), (r"pension", "Pension"),
+    (r"salary|annual income|earnings", "Salary"), (r"dividend", "Dividend"),
+    (r"bonus", "Bonus"), (r"rental|rent", "Rental income"),
+    (r"investment|interest", "Investment income"), (r"benefit", "Benefit"),
+]
+def income_type(name):
+    n = name.lower()
+    for pat, t in INCOME_TYPE:
+        if re.search(pat, n):
+            return t, ""
+    return "Other", name
+
+# Map a source expense name to one of Plannr's three sections, using the category
+# groupings configured in Plannr. Source names are kept as-is (custom expenses);
+# this only decides the section. No match -> blank + red.
+EXP_SECTION = [
+    # explicit section words, if the source already labels them
+    (r"\bessential\b", "Essential"),
+    (r"\blifestyle\b", "Lifestyle"),
+    (r"\bdiscretionary\b", "Discretionary"),
+    # Discretionary: Regular Savings, Pension Contributions, Gifting, Gambling
+    (r"saving|pension|\bgift|donation|charit|gambl|betting|\bbet\b|lottery|casino|wager", "Discretionary"),
+    # Lifestyle: Hobbies/Club, Holidays, Socialising/Eating Out, Cigarettes/Tobacco/Vaping,
+    #            Personal Care, Professional Fees, Subscriptions, Pets
+    (r"hobb|\bclub|members|\bgym\b|leisure|\bsport", "Lifestyle"),
+    (r"holiday|vacation", "Lifestyle"),
+    (r"social|eating out|dining|restaurant|\bpub\b|takeaway|take-away|cinema|entertain", "Lifestyle"),
+    (r"cigarett|tobacco|vap|smoking", "Lifestyle"),
+    (r"personal care|hairdress|\bhair\b|beauty|grooming|cosmetic|toiletr|\bsalon", "Lifestyle"),
+    (r"professional fee|accountant|solicitor|legal fee|advis(?:e|o)r fee", "Lifestyle"),
+    (r"subscription|netflix|spotify|disney|streaming|magazine|newspaper", "Lifestyle"),
+    (r"\bpet\b|\bpets\b|\bvet\b|veterin", "Lifestyle"),
+    # Essential: Mortgage (main/other), Utilities, Food/Household, Travel/Commuting,
+    #            Loans/Credit Cards/Other Debt, Insurance, Clothing, TV/Internet/Phone,
+    #            Mobile Phones, Childcare/School Fees
+    (r"mortgage|\brent\b", "Essential"),
+    (r"utilit|\bgas\b|electric|\bwater\b|council tax|energy|heating", "Essential"),
+    (r"food|grocer|household|supermarket", "Essential"),
+    (r"travel|commut|\bfuel\b|petrol|diesel|transport|\btrain\b|\bbus\b|parking|\bcar\b", "Essential"),
+    (r"\bloan|credit card|\bdebt\b|hire purchase|\bfinance\b|overdraft", "Essential"),
+    (r"insurance|protection|life cover", "Essential"),
+    (r"clothing|clothes|shoes|footwear", "Essential"),
+    (r"\btv\b|internet|\bphone|broadband|landline|mobile", "Essential"),
+    (r"childcare|childmind|\bnanny\b|au pair|\bschool|nursery|tuition|education", "Essential"),
+]
+def exp_section(name):
+    n = name.lower()
+    for pat, sec in EXP_SECTION:
+        if re.search(pat, n):
+            return sec
+    return ""
+
+# ---------------------------------------------------------------- gather clients
+P = eg["01 - Person Clients"]
+B = eg["02 - Business Clients"]
+TR = eg["03 - Trust Clients"]
+
+client_uuids = (set(P["client_uuid"].dropna()) | set(B["primary_contact_uuid"].dropna())
+                | set(TR["client_uuid"].dropna()))
+
+def latest(df, key, datecol):
+    """dict key -> latest row by datecol"""
+    out = {}
+    for _, r in df.iterrows():
+        k = s(r.get(key))
+        if not k:
+            continue
+        dt = d8(r.get(datecol)) or "0000"
+        if k not in out or dt >= out[k][0]:
+            out[k] = (dt, r)
+    return {k: v[1] for k, v in out.items()}
+
+addr_cur = {}
+for _, r in eg["12 - Address History"].iterrows():
+    if s(r["status"]).lower() == "current":
+        k = s(r["uuid"])
+        prev = addr_cur.get(k)
+        if prev is None or (d8(r["moved_in_date"]) or "0000") >= (d8(prev["moved_in_date"]) or "0000"):
+            addr_cur[k] = r
+
+wills_cur = {s(r["client_uuid"]): r for _, r in eg["16 - Wills"].iterrows()
+             if s(r["status"]).lower() == "current"}
+vuln = latest(eg["11 - Vulnerabilities"], "uuid", "date_of_assessment")
+aml = latest(eg["19 - AML History"], "client_uuid", "date_performed")
+seg_cur = {s(r["client_uuid"]): s(r["segment"])
+           for _, r in eg["13 - Segmentation History"].iterrows()
+           if s(r["segment_status"]).lower() == "current"}
+rev = latest(eg["07 - Reviews"], "client_1_uuid", "date_of_reivew")
+rev2 = latest(eg["07 - Reviews"], "client_2_uuid", "date_of_reivew")
+for k, r in rev2.items():
+    if k not in rev or (d8(r["date_of_reivew"]) or "0000") > (d8(rev[k]["date_of_reivew"]) or "0000"):
+        rev[k] = r
+
+# POA (sheet 15): client UUID in col A; merge col C (scope) + ", " + col E (attorneys)
+poa_by_ref = {}
+_poa = eg.get("15 - Power of Attorney")
+if _poa is not None and not _poa.empty:
+    # pick the column with the most UUID-like values (the real client-uuid column; columns
+    # added by the safe-access reindex are empty and score zero)
+    _best, _bestn = None, 0
+    for _c in _poa.columns:
+        _n = sum(1 for _v in _poa[_c].tolist()
+                 if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F-]{4,}", s(_v)))
+        if _n > _bestn:
+            _best, _bestn = _c, _n
+    if _best is not None:
+        for _, r in _poa.iterrows():
+            cu = s(r[_best])
+            if cu and cu not in poa_by_ref:
+                poa_by_ref[cu] = "Power of attorney recorded in source - review details"
+
+rows_clients, fl_clients = [], []   # row dicts, flag dicts {(col): 'RED'/'AMBER'}
+flags_text = []
+
+# Pre-scan policies for ongoing charges so the client status (and its flag) can use it
+# (clients are built before plans).
+clients_with_ongoing = set()
+for _, _pr in eg["04 - Policies"].iterrows():
+    _f = s(_pr["ongoing_service_charge_frequency"]).lower()
+    _p = num(_pr["ongoing_service_charge_percentage"])
+    if (_f in ("monthly", "quarterly", "annually", "biannually", "fortnightly", "weekly")
+            or (str(_p) not in ("", "0") and float(_p or 0) > 0)):
+        for _o in (s(_pr["client_1_uuid"]), s(_pr["client_2_uuid"])):
+            if _o:
+                clients_with_ongoing.add(_o)
+
+# mobiles cannot be imported via the importer -> shown for API load (first-wins per ref)
+mobile_by_ref = {}
+for _, r in P.iterrows():
+    k = s(r["client_uuid"])
+    if k and k not in mobile_by_ref:
+        mobile_by_ref[k] = s(r["mobile_number"])
+
+def base(cols):
+    return {c: "" for c in cols}
+
+corrupt_refs, dup_refs, seen = [], [], set()
+for _, r in P.iterrows():
+    c = base(COLS["Clients"])
+    f, note = {}, []
+    ref = s(r["client_uuid"])
+    if ref in seen:
+        dup_refs.append(ref)
+        note.append("Duplicate row for this client ref in source")
+        f["first_name"] = f.get("first_name", "AMBER")
+    seen.add(ref)
+    corrupted = not s(r["forename"]) and not s(r["surname"])
+    if corrupted:
+        corrupt_refs.append(ref)
+        note.append("Source row corrupted on export (fields shifted) - please re-extract this client")
+    c["type"] = "individual"
+    title = s(r["title"])
+    if title and title not in VALID_TITLES:
+        note.append(f"Title field contained stray text: '{title[:40]}'")
+        title = ""
+    c["title"] = title
+    fore = s(r["forename"]).split(" ", 1)
+    c["first_name"], c["middle_name"] = fore[0], (fore[1] if len(fore) > 1 else "")
+    c["last_name"] = s(r["surname"])
+    c["maiden_name"] = s(r["maiden_name"])
+    c["nickname"] = s(r["preferred_name"])
+    c["gender"] = s(r["sex"])
+    ni = s(r["national_insurance_number"]).replace(" ", "").upper()
+    c["ni_number"] = ni
+    if ni and not re.fullmatch(r"[A-Z]{2}\d{6}[A-D]?", ni):
+        f["ni_number"] = "AMBER"; note.append("NI number not in standard format")
+    c["marital_status"] = s(r["marital_status"])
+    c["date_of_birth"] = d8(r["date_of_birth"])
+    c["target_retirement_age"] = num(r["intended_retirement_age"])
+    c["email"] = s(r["email"])
+    c["phone"] = s(r["home_number"]) or s(r["work_number"])
+    nat = s(r["nationality"])
+    nat2 = s(r["second_nationality"])
+    c["nationalities"] = ", ".join(x for x in (nat, nat2) if x)
+    c["country_of_residence"] = s(r["residency"])
+    c["is_uk_resident"] = "yes" if s(r["residency"]) == "United Kingdom" else ""
+    c["is_uk_domicile"] = "yes" if s(r["domocile"]) == "United Kingdom" else ""
+    c["is_in_receipt_of_your_state_pension"] = yn(r["in_receipt_of_state_pension"])
+    c["has_obtained_a_forecast"] = yn(r["state_pension_forecast_received"])
+    yc = num(r["years_of_ni_contributions"])
+    c["years_of_national_insurance_contributions"] = yc if yc != 0 else ""
+    smk, vap = s(r["smokes_tobacco"]), s(r["vapes"])
+    c["smoker_status"] = ("smoker" if smk in ("1", "1.0")
+                          else "vaper" if vap in ("1", "1.0")
+                          else "non-smoker" if smk in ("0", "0.0") else "")
+    igh = s(r["in_good_health"])
+    c["current_state_of_health"] = "good" if igh in ("1", "1.0") else ""
+    if igh in ("0", "0.0"):
+        f["current_state_of_health"] = "AMBER"; note.append("Source: not in good health - state fair/poor")
+    hn = [s(r["health_notes"]), s(r["smoked_tobacco_details"])]
+    c["health_notes"] = "; ".join(x for x in hn if x)
+    c["client_regulatory_classification"] = "Retail Client"   # blanket: advised individuals
+    f["client_regulatory_classification"] = "AMBER"
+    c["is_prospect"] = "no"
+    # Tier 2 status from the review-cadence classification; flag a 'level' client with no ongoing charge
+    _cls = s(r["classification"])
+    c["status_name"] = REVIEW_CLASS_TO_STATUS.get(_cls, "")
+    if _cls in ("3", "3.0"):
+        f["status_name"] = "AMBER"
+        note.append("Classification 3 (24-monthly legacy) has no live service tier - set status manually")
+    elif _cls in ONGOING_REVIEW_CLASSES and ref not in clients_with_ongoing:
+        f["status_name"] = "AMBER"
+        note.append(f"On an ongoing review cadence ({REVIEW_CADENCE.get(_cls, '?')}) but no ongoing charge found on any plan - confirm proposition or charge")
+    # enrichment
+    a = addr_cur.get(ref)
+    if a is not None:
+        c["address_1"], c["address_2"], c["address_3"] = s(a["address_line_1"]), s(a["address_line_2"]), s(a["address_line_3"])
+        town, city = s(a["town"]), s(a["city"])
+        c["address_4"] = town if (town and city) else ""
+        c["town_city"] = city or town
+        c["county"], c["postcode"], c["country"] = s(a["county"]), s(a["postcode"]), s(a["country"])
+    w = wills_cur.get(ref)
+    if w is not None:
+        c["has_will"] = "yes"
+        c["will_last_reviewed"] = d8(w["date_will_last_reviewed"])
+        c["will_executors"] = s(w["executors"])
+        wn = []
+        if d8(w["date_will_set_up"]):
+            wn.append(f"Set up {d8(w['date_will_set_up'])}")
+        if s(w["beneficiaries"]):
+            wn.append(f"Beneficiaries: {s(w['beneficiaries'])}")
+        c["will_notes"] = "; ".join(wn)
+    v = vuln.get(ref)
+    if v is not None:
+        c["vulnerability_last_assessment_date"] = d8(v["date_of_assessment"])
+        inds = {"Life Events": s(v["major_life_events"]), "Resilience": s(v["low_resilience"]),
+                "Capability": s(v["low_capacity"]),
+                "Health": "Yes" if s(v["in_good_health"]).lower() == "no" else "No"}
+        pos = [k for k, x in inds.items() if x.lower() == "yes"]
+        vi = s(v["vulnerability_indicators"])
+        c["is_vulnerable"] = "yes" if (pos or vi) else ("no" if any(x.lower() == "no" for x in inds.values()) else "")
+        c["vulnerability_sub_type"] = pos[0] if pos else ""
+        sup = s(v.get("GROUP_CONCAT(di.extra_supporting_actions SEPARATOR '|')", "")) \
+            + ("; " + s(v.get("GROUP_CONCAT(di.detail_supporting_actions SEPARATOR '|')", "")) if s(v.get("GROUP_CONCAT(di.detail_supporting_actions SEPARATOR '|')", "")) else "")
+        c["vulnerability_details"] = "; ".join(x for x in (vi, sup.strip("; ")) if x)
+    am = aml.get(ref)
+    if am is not None:
+        c["checked_sanctions_at"] = d8(am["date_performed"])
+        f["checked_sanctions_at"] = "AMBER"
+    if ref in poa_by_ref:
+        c["has_power_of_attorney"] = "yes"
+        c["power_of_attorney_notes"] = poa_by_ref[ref]
+    rv = rev.get(ref)
+    if rv is not None:
+        c["previous_review_date"] = d8(rv["date_of_reivew"])
+        try:
+            c["next_review_date"] = (pd.to_datetime(c["previous_review_date"]) + pd.DateOffset(years=1)).strftime("%Y-%m-%d")
+            f["next_review_date"] = "AMBER"
+        except Exception:
+            pass
+    rows_clients.append(c); fl_clients.append(f)
+    flags_text.append("; ".join(note))
+
+biz_seen = set()
+for _, r in B.iterrows():
+    ref = s(r["primary_contact_uuid"])
+    if ref in biz_seen:
+        dup_refs.append(ref); continue
+    biz_seen.add(ref)
+    c = base(COLS["Clients"]); f, note = {}, []
+    c["type"] = "business"
+    c["entity_name"] = s(r["business_name"])
+    c["is_prospect"] = "no"
+    f["client_regulatory_classification"] = "RED"
+    pcu = s(r["primary_contact_uuid"])
+    c["owners"] = pcu
+    if pcu:
+        f["owners"] = "AMBER"
+        note.append(f"Owner = primary contact {s(r['primary_contact_name'])} (source UUID, remapped at import)")
+    reg = [s(r.get(x, "")) for x in ("address_line_1", "address_line_2", "address_town",
+                                     "address_city", "address_county", "address_postcode", "address_country")]
+    cor = [s(r.get(x, "")) for x in ("correspondance_address_line_1", "correspondance_address_line_2",
+                                     "correspondance_address_town", "correspondance_address_city",
+                                     "correspondance_address_county", "correspondance_address_postcode",
+                                     "correspondance_address_country")]
+    use = reg if any(reg) else cor
+    if use == cor and any(cor):
+        note.append("Registered address blank - correspondence address used")
+    c["address_1"], c["address_2"], c["address_4"] = use[0], use[1], use[2]
+    c["town_city"], c["county"], c["postcode"], c["country"] = use[3] or use[2], use[4], use[5], use[6]
+    if use[3]:
+        c["address_4"] = use[2]
+    c["phone"] = s(r["business_phone_number"])
+    if s(r["vat_number"]):
+        note.append(f"VAT number {s(r['vat_number'])} - no importer field, hold for record")
+    rows_clients.append(c); fl_clients.append(f); flags_text.append("; ".join(note))
+
+for _, r in TR.iterrows():
+    c = base(COLS["Clients"]); f, note = {}, []
+    c["type"] = "trust"
+    c["entity_name"] = s(r["client_name"])
+    c["is_prospect"] = "no"
+    f["client_regulatory_classification"] = "RED"
+    c["owners"] = ""
+    f["owners"] = "RED"
+    note.append("Trust requires an individual owner - supply the client UUID (none in source)")
+    c["address_1"], c["address_2"] = s(r["address_line_1"]), s(r["address_line_2"])
+    town, city = s(r["town"]), s(r["city"])
+    c["address_4"] = town if (town and city) else ""
+    c["town_city"] = city or town
+    c["county"], c["postcode"], c["country"] = s(r["county"]), s(r["postcode"]), s(r["country"])
+    rows_clients.append(c); fl_clients.append(f); flags_text.append("; ".join(note))
+
+client_refs = ([s(r["client_uuid"]) for _, r in P.iterrows()]
+               + [s(r["primary_contact_uuid"]) for _, r in B.iterrows() if s(r["primary_contact_uuid"]) in biz_seen]
+               + [s(r["client_uuid"]) for _, r in TR.iterrows()])
+# dedupe biz path may shorten; rebuild aligned refs
+client_refs = []
+seen2, biz_seen2 = set(), set()
+for _, r in P.iterrows():
+    client_refs.append(s(r["client_uuid"]))
+for _, r in B.iterrows():
+    ref = s(r["primary_contact_uuid"])
+    if ref not in biz_seen2:
+        biz_seen2.add(ref); client_refs.append(ref)
+for _, r in TR.iterrows():
+    client_refs.append(s(r["client_uuid"]))
+
+# ---------------------------------------------------------------- plans
+rows_plans, fl_plans, plan_flags, plan_refs, plan_src = [], [], [], [], []
+plan_owner_names, plan_product_src = [], []   # source values shown next to mapped fields
+policy_val_rows = []                            # (ref, name, value) from policy 'contribution'
+orphan_plan_owners = set()
+POL = eg["04 - Policies"]
+UNDER = {"yes": "yes", "servicing_agent": "yes", "information_authority": "yes", "none": "no"}
+
+
+def own_split(owners):
+    """client_uuids (comma-joined) + client_ownership_percentage (parallel, equal split)."""
+    owners = [o for o in owners if o]
+    if not owners:
+        return "", ""
+    if len(owners) == 1:
+        return owners[0], "100"
+    n = len(owners)
+    each = round(100.0 / n, 2)
+    pcts = [each] * n
+    pcts[-1] = round(100.0 - each * (n - 1), 2)
+    fmt = lambda x: str(int(x)) if float(x).is_integer() else str(x)
+    return ",".join(owners), ",".join(fmt(p) for p in pcts)
+
+
+def set_policy_number(c, f, note, raw, is_fixed_asset):
+    pn = s(raw)
+    if is_fixed_asset:
+        c["policy_number"] = pn
+        return
+    if not pn:
+        c["policy_number"] = "unknown"
+        f["policy_number"] = "AMBER"
+        note.append("No policy number in source - defaulted to 'unknown'; please supply the real number")
+    else:
+        c["policy_number"] = pn
+        if "|" in pn:
+            note.append("Multiple policy numbers - enter the single number the valuation feed must match")
+
+for i, r in POL.iterrows():
+    c = base(COLS["Plans"]); f, note = {}, []
+    prod = s(r["product"])
+    owners = [s(r["client_1_uuid"])] + ([s(r["client_2_uuid"])] if s(r["client_2_uuid"]) else [])
+    for o in owners:
+        if o and o not in client_uuids:
+            orphan_plan_owners.add(o)
+            f["client_uuids"] = "AMBER"; note.append(f"Owner ref {o[:8]}... has no client record in this export")
+    c["client_uuids"], c["client_ownership_percentage"] = own_split(owners)
+    if len(owners) > 1:
+        f["client_ownership_percentage"] = "AMBER"
+        note.append("Joint plan - assumed equal ownership, confirm split")
+    c["name"] = s(r["product_specific_name"]) or prod
+    set_policy_number(c, f, note, r["policy_numbers"], is_fixed_asset=False)
+    c["provider"] = s(r["primary_provider"])
+    _pu, _pn, _pe = match_provider(c["provider"])
+    if _pe:
+        c["provider_uuid"] = _pu
+    elif c["provider"]:
+        f["provider"] = "AMBER"
+        if _pn:
+            note.append(_pn)
+    owner_nm = " & ".join(x for x in [s(r["client_1"]), s(r["client_2"])] if x)
+    _pmr = pm_lookup(prod)
+    if _pmr == "NONPLAN":
+        f["type"] = f["sub_type"] = "RED"
+        note.append(f"'{prod}' is not a plan - confirm whether this is a fee/adjustment record to drop or re-key")
+    elif _pmr:
+        typ, sub, n2 = _pmr
+        c["type"], c["sub_type"] = typ, sub
+        if n2:
+            f["sub_type"] = "AMBER"; note.append(n2)
+        _stn = subtype_note(c["type"], c["sub_type"])
+        if _stn and "sub_type" not in f:
+            f["sub_type"] = "AMBER"; note.append(_stn)
+    else:
+        f["type"] = f["sub_type"] = "RED"; note.append(f"No mapping for product '{prod}'")
+    c["status"] = "Active"
+    _sale, _xfer, _legacy = d8(r["date_of_sale"]), d8(r["date_of_transfer"]), d8(r["plan_start_date"])
+    if _sale:
+        c["opened_at"], _src = _sale, "date_of_sale"
+    elif _xfer:
+        c["opened_at"], _src = _xfer, "date_of_transfer"
+    elif _legacy:
+        c["opened_at"], _src = _legacy, "plan_start_date"
+    else:
+        c["opened_at"], _src = "2026-01-01", "defaulted 2026-01-01"
+    f["opened_at"] = "AMBER"
+    note.append(f"Start date from {_src} - AR to approve")
+    agt = s(r["agency_transfer"]).lower()
+    c["agency_in_your_name"] = "yes" if agt == "yes" else ("no" if agt == "no" else "")
+    c["under_advice"] = UNDER.get(s(r["under_my_advice"]).lower(), "")
+    # Ongoing charge present -> force under advice + agency in your name; agency-from = plan start.
+    _ocf = s(r["ongoing_service_charge_frequency"]).lower()
+    _ocp = num(r["ongoing_service_charge_percentage"])
+    has_ongoing = (_ocf in ("monthly", "quarterly", "annually", "biannually", "fortnightly", "weekly")
+                   or (str(_ocp) not in ("", "0") and float(_ocp or 0) > 0))
+    if has_ongoing:
+        c["under_advice"] = "yes"
+        c["agency_in_your_name"] = "yes"
+        for o in owners:
+            if o:
+                clients_with_ongoing.add(o)
+    if c["agency_in_your_name"] == "yes":
+        c["agency_in_your_name_from"] = c["opened_at"]
+        f["agency_in_your_name_from"] = "AMBER"
+    c["show_on_circles"] = "yes"
+    c["visible_on_client_portal"] = "yes"
+    c["include_in_client_valuation"] = "yes"
+    c["is_wrap_product"] = "yes" if prod == "Wrap Account" else "no"
+    c["review_date"] = ""
+    rows_plans.append(c); fl_plans.append(f); plan_flags.append("; ".join(note))
+    plan_refs.append(s(r["policy_uuid"])); plan_src.append(f"04 - Policies r{i+2}")
+    plan_owner_names.append(owner_nm); plan_product_src.append(prod)
+    cv = num(r["contribution"])
+    if cv != "" and float(cv or 0) > 0:
+        policy_val_rows.append((s(r["policy_uuid"]), c["name"], cv))
+
+DB = eg["05 - Defined Benefit Pensions"]
+for i, r in DB.iterrows():
+    c = base(COLS["Plans"]); f, note = {}, []
+    # This CRM's DB export can put an internal id in client_1_uuid rather than the client.
+    # Prefer the owner column(s) that actually match the client master.
+    _cands = [s(r["client_1_uuid"]), s(r["client_2_uuid"])]
+    _matched = [o for o in _cands if o and o in client_uuids]
+    owners = _matched if _matched else ([o for o in _cands if o] or [s(r["client_1_uuid"])])
+    for o in owners:
+        if o and o not in client_uuids:
+            orphan_plan_owners.add(o); f["client_uuids"] = "AMBER"
+            note.append(f"Owner ref {o[:8]}... has no client record in this export")
+    c["client_uuids"], c["client_ownership_percentage"] = own_split(owners)
+    if len(owners) > 1:
+        f["client_ownership_percentage"] = "AMBER"
+        note.append("Joint plan - assumed equal ownership, confirm split")
+    c["name"] = s(r["scheme_name"])
+    c["type"], c["sub_type"] = "pension", "Defined Benefit Pension"
+    if subtype_note(c["type"], c["sub_type"]):
+        f["sub_type"] = "AMBER"; note.append(subtype_note(c["type"], c["sub_type"]))
+    c["status"] = "Active"
+    set_policy_number(c, f, note, "", is_fixed_asset=False)
+    c["provider"] = s(r["scheme_name"])
+    _pu, _pn, _pe = match_provider(c["provider"])
+    if _pe:
+        c["provider_uuid"] = _pu
+    f["provider"] = "AMBER"; note.append("Scheme name used as provider - confirm administrator")
+    c["pension_plan_retirement_age"] = num(r["scheme_Retirement_age"])
+    c["pension_projected_income"] = num(r["ROUND(db.full_pension,2)"])
+    c["pension_tax_free_amount"] = num(r["ROUND(db.tax_free_cash,2)"])
+    red = num(r["ROUND(db.reduced_pension,2)"])
+    if red != "":
+        note.append(f"Reduced pension {red} - no importer field, hold for fact-find")
+    c["show_on_circles"] = c["visible_on_client_portal"] = c["include_in_client_valuation"] = "yes"
+    c["is_wrap_product"] = "no"
+    f["opened_at"] = "AMBER"
+    rows_plans.append(c); fl_plans.append(f); plan_flags.append("; ".join(note))
+    plan_refs.append(s(r["defined_benfit_uuid"])); plan_src.append(f"05 - DB Pensions r{i+2}")
+    plan_owner_names.append(" & ".join(x for x in [s(r["client_1_name"]), s(r["client_2_name"])] if x))
+    plan_product_src.append("DB Pension (sheet 05)")
+
+PR = eg["18 - Properties"]
+prop_val_rows = []
+for i, r in PR.iterrows():
+    c = base(COLS["Plans"]); f, note = {}, []
+    owners = [s(x) for x in s(r["owner_uuids"]).split("|") if s(x)]
+    for o in owners:
+        if o not in client_uuids:
+            orphan_plan_owners.add(o); f["client_uuids"] = "AMBER"
+            note.append(f"Owner ref {o[:8]}... has no client record in this export")
+    c["client_uuids"], c["client_ownership_percentage"] = own_split(owners)
+    if len(owners) > 1:
+        f["client_ownership_percentage"] = "AMBER"
+        note.append("Joint asset - assumed equal ownership, confirm split")
+    c["name"] = s(r["property_name"]) or "Property"
+    c["type"], c["sub_type"] = "fixed_asset", "Property"
+    if subtype_note(c["type"], c["sub_type"]):
+        f["sub_type"] = "AMBER"; note.append(subtype_note(c["type"], c["sub_type"]))
+    prop_owner_nm = s(r["owners"])
+    st = s(r["property_status"])
+    c["status"] = st if st in ("Active", "Inactive") else "Active"
+    if st not in ("Active", "Inactive"):
+        f["status"] = "AMBER"; note.append("Property status unknown - confirm")
+    if c["status"] == "Inactive":
+        c["inactive_at"] = d8(r["date_sold"])
+        c["inactive_reason"] = "complete"
+    c["fixed_asset_address_1"] = s(r["address"])
+    c["fixed_asset_postcode"] = s(r["postcode"])
+    c["show_on_circles"] = c["visible_on_client_portal"] = c["include_in_client_valuation"] = "yes"
+    c["is_wrap_product"] = "no"
+    rows_plans.append(c); fl_plans.append(f); plan_flags.append("; ".join(note))
+    pref = s(r["property_uuid"])
+    plan_refs.append(pref); plan_src.append(f"18 - Properties r{i+2}")
+    plan_owner_names.append(prop_owner_nm); plan_product_src.append("Property (sheet 18)")
+    cv = num(r["current_value"])
+    if cv != "" and float(cv or 0) > 0 and c["status"] == "Active":
+        prop_val_rows.append((pref, c["name"], cv))
+    if s(r["has_current_mortgage"]).lower() == "yes":
+        m = base(COLS["Plans"]); mf, mn = {}, []
+        m["client_uuids"] = c["client_uuids"]
+        m["client_ownership_percentage"] = c["client_ownership_percentage"]
+        if len(owners) > 1:
+            mf["client_ownership_percentage"] = "AMBER"
+        m["name"] = f"Mortgage - {c['name']}"
+        m["type"] = "mortgage"
+        mt = s(r["mortgage_type"])
+        m["sub_type"] = ("Mortgage Buy to Let" if mt == "Buy to Let" else "Mortgage")
+        if mt == "Other":
+            mf["sub_type"] = "AMBER"; mn.append("Mortgage type 'Other' - specify")
+        if subtype_note(m["type"], m["sub_type"]) and "sub_type" not in mf:
+            mf["sub_type"] = "AMBER"; mn.append(subtype_note(m["type"], m["sub_type"]))
+        m["status"] = "Active"
+        m["provider"] = s(r["mortgage_lender"])
+        _mu, _mn, _me = match_provider(m["provider"])
+        if _me:
+            m["provider_uuid"] = _mu
+        elif m["provider"]:
+            mf["provider"] = "AMBER"
+            if _mn:
+                mn.append(_mn)
+        set_policy_number(m, mf, mn, r["mortgage_reference"], is_fixed_asset=False)
+        m["mortgage_outstanding_balance"] = num(r["outstanding_mortgage_amount"])
+        m["mortgage_payment_amount"] = num(r["monthly_mortgage_payment_amount"])
+        m["mortgage_payment_frequency"] = "Monthly" if m["mortgage_payment_amount"] != "" else ""
+        rt = s(r["mortgage_rate_type"]).lower()
+        m["mortgage_interest_type"] = rt if rt in ("fixed", "variable") else ""
+        m["mortgage_interest_rate"] = num(r["mortgage_rate_percentage"])
+        m["mortgage_initial_period_end"] = d8(r["mortgage_rate_end"])
+        m["mortgage_repayment_type"] = ("repayment" if mt == "Repayment"
+                                        else "interest_only" if mt == "Interest Only" else "")
+        m["mortgage_repayment_term"] = num(r["remaining_term"])
+        m["show_on_circles"] = m["visible_on_client_portal"] = m["include_in_client_valuation"] = "yes"
+        m["is_wrap_product"] = "no"
+        mf["opened_at"] = "AMBER"
+        rows_plans.append(m); fl_plans.append(mf); plan_flags.append("; ".join(mn))
+        plan_refs.append(pref + " (mortgage)"); plan_src.append(f"18 - Properties r{i+2}")
+        plan_owner_names.append(prop_owner_nm); plan_product_src.append("Mortgage (sheet 18)")
+
+# ---------------------------------------------------------------- valuations
+rows_val, fl_val, val_refs, val_notes = [], [], [], []
+for pref, nm, cv in prop_val_rows:
+    c = base(COLS["Valuations"]); f = {}
+    c["value"] = cv
+    c["valuation_date"] = GO_LIVE
+    f["valuation_date"] = "AMBER"
+    rows_val.append(c); fl_val.append(f); val_refs.append((pref, nm))
+    val_notes.append("Property current value; valuation date assumed = go-live")
+for pref, nm, cv in policy_val_rows:
+    c = base(COLS["Valuations"]); f = {}
+    c["value"] = cv
+    f["value"] = "AMBER"
+    c["valuation_date"] = GO_LIVE
+    f["valuation_date"] = "AMBER"
+    rows_val.append(c); fl_val.append(f); val_refs.append((pref, nm))
+    val_notes.append("From source 'contribution' - confirm this is a current value, not total contributions paid")
+
+# ---------------------------------------------------------------- premiums
+rows_prem, fl_prem, prem_refs, prem_notes = [], [], [], []
+for i, r in POL.iterrows():
+    if s(r["frequency"]).lower() in ("", "none"):
+        continue
+    amt = num(r["reoccurring_contribution"])
+    if amt == "" or float(amt or 0) == 0:
+        continue
+    c = base(COLS["Premiums"]); f = {}
+    c["amount"] = amt
+    c["frequency"] = freq(r["frequency"])
+    f["source"] = "AMBER"; f["payment_method"] = "AMBER"; f["start_date"] = "AMBER"
+    rows_prem.append(c); fl_prem.append(f)
+    prem_refs.append(s(r["policy_uuid"]))
+    prem_notes.append("Recurring contribution on policy; source/method/start optional - add if known")
+
+TU = eg["06 - Topups and Withdrawals"]
+withdrawal_count = 0
+for i, r in TU.iterrows():
+    if s(r["topup_or_withdrawal"]).lower() == "withdrawal":
+        withdrawal_count += 1
+        continue
+    c = base(COLS["Premiums"]); f, note = {}, []
+    c["amount"] = num(r["topup_amount"])
+    fq = s(r["reoccurring_contribution_frequency"]).lower()
+    c["frequency"] = freq(fq) if fq not in ("", "none", "single") else "One Off"
+    c["start_date"] = d8(r["date_of_topup_withdrawal"])
+    if not c["start_date"]:
+        f["start_date"] = "AMBER"
+    c["date_advice_given"] = c["start_date"]
+    f["source"] = "AMBER"; f["payment_method"] = "AMBER"
+    rows_prem.append(c); fl_prem.append(f)
+    prem_refs.append(s(r["policy_id"])); prem_notes.append("Top-up; source/method optional - add if known")
+
+# ---------------------------------------------------------------- charges
+rows_chg, fl_chg, chg_refs = [], [], []
+PAID = {"client": "Client", "provider": "Provider", "dfm": "Provider", "platform": "Provider"}
+for i, r in POL.iterrows():
+    pct = num(r["ongoing_service_charge_percentage"])
+    if pct == "" or float(pct or 0) == 0:
+        continue
+    c = base(COLS["Charges"]); f, note = {}, []
+    pb = s(r["ongoing_service_charge_paid_by"]).lower()
+    c["payment_origin"] = PAID.get(pb, "")
+    if pb in ("dfm", "platform"):
+        f["payment_origin"] = "AMBER"; note.append(f"Paid by {pb} - mapped to Provider, confirm")
+    elif not c["payment_origin"]:
+        f["payment_origin"] = "AMBER"; note.append(f"Payer '{pb or 'blank'}' not recognised - confirm Client or Provider")
+    c["type"] = "Fee"
+    c["category"] = "ongoing_fee"
+    c["recurring"] = "yes"
+    _cf = s(r["ongoing_service_charge_frequency"]).lower()
+    c["frequency"] = "Quarterly" if "quarter" in _cf else "Monthly"
+    c["percentage"] = pct
+    c["percentage_frequency"] = "Annually"
+    note.append("Charge taken " + c["frequency"].lower() + "; percentage is the annual figure")
+    vat = s(r["ongoing_service_charge_vat.1"]).lower() or s(r["ongoing_service_charge_vat"]).lower()
+    c["tax_exempt"] = "no" if vat in ("yes", "1", "1.0") else ("yes" if vat in ("no", "0", "0.0") else "")
+    c["exclude_from_rmar"] = "no"
+    c["service_type"] = "Ongoing"
+    c["start_date"] = GO_LIVE
+    f["start_date"] = "AMBER"; note.append("Charge start date set to go-live (26-06-2026) - confirm")
+    rows_chg.append(c); fl_chg.append(f)
+    chg_refs.append((s(r["policy_uuid"]), "; ".join(note)))
+
+# Any plan carrying an ongoing fee -> agency in your name + under advice = yes;
+# agency_in_your_name_from defaults to the plan start date where blank.
+fee_plan_refs = {ref for ref, _ in chg_refs if ref}
+for i, c in enumerate(rows_plans):
+    if plan_refs[i] in fee_plan_refs:
+        c["agency_in_your_name"] = "yes"
+        c["under_advice"] = "yes"
+        fl_plans[i]["agency_in_your_name"] = "AMBER"
+        fl_plans[i]["under_advice"] = "AMBER"
+        if not c["agency_in_your_name_from"]:
+            c["agency_in_your_name_from"] = c["opened_at"]
+            fl_plans[i]["agency_in_your_name_from"] = "AMBER"
+        plan_flags[i] = (plan_flags[i] + "; " if plan_flags[i] else "") + "Ongoing fee present: agency in your name and under advice set to yes"
+
+rows_ie, fl_ie, ie_refs, ie_notes = [], [], [], []
+IE = eg["24 - Income and Expenditure Ent"]
+exp_rows = []
+for i, r in IE.iterrows():
+    kind = s(r["income_or_expenditure"]).lower()
+    nm = s(r["entry_name"])
+    amt = num(r["amount"])
+    refs = [s(r["client_1_uuid"])] + ([s(r["client_2_uuid"])] if s(r["client_2_uuid"]) else [])
+    if kind == "expenditure":
+        exp_rows.append((refs, nm, amt, s(r["other_text"]), i))
+        continue
+    c = base(COLS["Income & Employment"]); f, note = {}, []
+    c["name"] = nm
+    t, other = income_type(nm)
+    c["type"] = t
+    c["type_other"] = other
+    c["is_taxable"] = "no" if other.strip().lower() == "other income - non-taxable" else "yes"
+    c["amount"] = amt
+    if amt == "":
+        f["amount"] = "RED"
+    c["amount_type"] = "Gross"
+    f["amount_type"] = "AMBER"
+    c["frequency"] = "Annually"   # source figures are annual; Guidance says convert to monthly
+    f["frequency"] = "AMBER"
+    if len(refs) > 1:
+        note.append("Joint income - confirm whose record")
+    rows_ie.append(c); fl_ie.append(f)
+    ie_refs.append(" | ".join(refs))
+    ie_notes.append("Annual figure - make monthly per Guidance; amount_type defaulted to Gross")
+
+EMP = eg["14 - Employment History"]
+emp_seen = set()
+emp_history_notes = []   # (client_uuid, text) -> appended to Notes
+EMPMAP = {"employed": "Employed", "self-employed": "Self Employed",
+          "unemployed": "Unemployed", "retired": "Retired", "semi-retired": "Retired"}
+for i, r in EMP.iterrows():
+    eu = s(r["employment_entry_uuid"])
+    key = (eu, s(r["client_uuid"]))
+    if key in emp_seen:
+        continue
+    emp_seen.add(key)
+    js = s(r["job_status"]).lower()
+    biz = s(r["business_name"])
+    role = s(r["job_role"])
+    cur = s(r["employment_status"]).lower() == "current"
+    if cur and js in ("employed", "self-employed"):
+        # current employment becomes a Salary income line (amount/gross-net needed)
+        c = base(COLS["Income & Employment"]); f, note = {}, []
+        c["name"] = f"Salary - {biz}" if biz else "Salary"
+        c["type"] = "Salary"
+        c["is_taxable"] = "yes"
+        c["amount"] = ""
+        f["amount"] = "RED"; note.append("Current employment - enter salary figure")
+        c["amount_type"] = ""
+        f["amount_type"] = "RED"
+        c["frequency"] = "Annually"
+        c["employment_employer"] = biz
+        c["employment_job_title"] = role or "unknown"
+        if not role:
+            f["employment_job_title"] = "AMBER"; note.append("No job title in source (sheet 14 col F) - set to unknown")
+        c["employment_status"] = EMPMAP.get(js, "")
+        c["employment_started_at"] = d8(r["date_started"])
+        c["employment_is_primary"] = "yes"
+        c["employment_address_line_1"] = s(r["business_address"])
+        c["employment_address_postcode"] = s(r["business_postcode"])
+        c["employment_phone"] = s(r["business_telephone"])
+        c["employment_email"] = s(r["business_email"])
+        rows_ie.append(c); fl_ie.append(f)
+        ie_refs.append(s(r["client_uuid"])); ie_notes.append("; ".join(note))
+    else:
+        # past employment / non-earning current status -> Notes (no income importer route)
+        when = ""
+        ds, df_ = d8(r["date_started"]), d8(r["date_finished"])
+        if ds or df_:
+            when = f" ({ds or '?'} to {df_ or 'present'})"
+        status = EMPMAP.get(js, js or "")
+        label = "Current" if cur else "Previous"
+        txt = f"{label} employment: {role or 'role n/a'}" + (f" at {biz}" if biz else "") + when
+        if status:
+            txt += f"; status {status}"
+        emp_history_notes.append((s(r["client_uuid"]), txt))
+
+# ---------------------------------------------------------------- expenses
+rows_exp, fl_exp, exp_refs, exp_notes = [], [], [], []
+for refs, nm, amt, other, i in exp_rows:
+    if amt == "" or float(amt or 0) == 0:
+        continue   # drop zero / blank expenditure lines
+    c = base(COLS["Expenses"]); f, note = {}, []
+    c["expense_name"] = nm
+    c["amount"] = amt
+    note.append("Annual figure - make monthly per Guidance")
+    if len(refs) > 1:
+        f["amount"] = "AMBER"
+        note.append("Joint expenditure - split equally across the joint clients unless told otherwise (Guidance)")
+    c["life_stage_name"] = "Current Lifestyle"
+    sec = exp_section(nm)
+    c["life_stage_section_name"] = sec
+    if sec:
+        f["life_stage_section_name"] = "AMBER"
+    else:
+        f["life_stage_section_name"] = "RED"
+        note.append("Section could not be inferred")
+    c["is_custom_expense"] = "yes"   # source categories do not map to Plannr's
+    if other:
+        note.append(f"Detail: {other[:80]}")
+    rows_exp.append(c); fl_exp.append(f)
+    exp_refs.append(" | ".join(refs)); exp_notes.append("; ".join(note))
+
+# ---------------------------------------------------------------- notes
+rows_nt, fl_nt, nt_refs, nt_src = [], [], [], []
+MEET = {"Face to Face Meeting": "meeting", "Video Call": "meeting",
+        "Telephone Call": "call", "Email Correspondence": "email", "Desktop Review": "note"}
+CL = eg["25 - Client Contact Log"]
+for i, r in CL.iterrows():
+    c = base(COLS["Notes"]); f = {}
+    c["model_type"] = "account"
+    c["type"] = MEET.get(s(r["meeting_type"]), "note")
+    parts = [s(r["reason_for_contact"])]
+    if s(r["time_spent_at_meeting"]):
+        parts.append(f"Time spent: {s(r['time_spent_at_meeting'])}")
+    if s(r["joint_with_spouse"]).lower() in ("yes", "1", "1.0"):
+        parts.append("Joint with spouse")
+    c["contents"] = " | ".join(x for x in parts if x) or f"{s(r['meeting_type'])} logged"
+    c["is_pinned"] = "No"
+    c["visible_to_clients"] = "No"
+    c["created_at"] = d8(r["meeting_date_time"])
+    rows_nt.append(c); fl_nt.append(f)
+    nt_refs.append(s(r["contact_uuid"])); nt_src.append(f"25 - Contact Log r{i+2}")
+
+CG = eg["26 - Circumstances and Goals"]
+for i, r in CG.iterrows():
+    c = base(COLS["Notes"]); f = {}
+    c["model_type"] = "account"; c["type"] = "note"
+    parts = []
+    if s(r["current_circumstances"]):
+        parts.append(f"Circumstances: {s(r['current_circumstances'])}")
+    if s(r["objectives_moving_forward"]):
+        parts.append(f"Objectives: {s(r['objectives_moving_forward'])}")
+    if s(r["other_notes"]):
+        parts.append(s(r["other_notes"]))
+    c["contents"] = " | ".join(parts)
+    if not c["contents"]:
+        continue
+    c["is_pinned"] = "No"; c["visible_to_clients"] = "No"
+    c["created_at"] = d8(r["date_captured"])
+    rows_nt.append(c); fl_nt.append(f)
+    nt_refs.append(s(r["client_uuid"])); nt_src.append(f"26 - Circumstances r{i+2}")
+
+NO = eg["22 - Needs and Objectives"]
+for i, r in NO.iterrows():
+    c = base(COLS["Notes"]); f = {}
+    areas = []
+    for col, label in [("preretirement_planning", "Pre-retirement"), ("protection", "Protection"),
+                       ("estate_planning", "Estate planning"), ("savings_investments", "Savings/Investments"),
+                       ("at_retirement", "At retirement"), ("other", "Other")]:
+        if s(r[col]).lower() in ("yes", "1", "1.0", "true"):
+            areas.append(label)
+    parts = []
+    if areas:
+        parts.append("Needs identified: " + ", ".join(areas))
+    for col in ("reason_notes", "addressed_later_notes", "declined_notes", "other_notes"):
+        if s(r[col]):
+            parts.append(s(r[col]))
+    if not parts:
+        continue
+    c["model_type"] = "account"; c["type"] = "note"
+    c["contents"] = "Needs & objectives - " + " | ".join(parts)
+    c["is_pinned"] = "No"; c["visible_to_clients"] = "No"
+    c["created_at"] = d8(r["date_captured"])
+    rows_nt.append(c); fl_nt.append(f)
+    nt_refs.append(s(r["client_1_uuid"])); nt_src.append(f"22 - Needs&Obj r{i+2}")
+
+RV = eg["07 - Reviews"]
+for i, r in RV.iterrows():
+    c = base(COLS["Notes"]); f = {}
+    c["model_type"] = "account"; c["type"] = "note"
+    c["contents"] = (f"Review ({s(r['type_of_review'])}) - {s(r['outcome_of_review'])}"
+                     + (f" | Policies reviewed: {s(r['reviewed_policy_uuids'])}" if s(r["reviewed_policy_uuids"]) else ""))
+    c["is_pinned"] = "No"; c["visible_to_clients"] = "No"
+    c["created_at"] = d8(r["date_of_reivew"])
+    rows_nt.append(c); fl_nt.append(f)
+    nt_refs.append(s(r["client_1_uuid"])); nt_src.append(f"07 - Reviews r{i+2}")
+
+# employment history (records not carried as Salary income) -> notes
+for cuid, txt in emp_history_notes:
+    c = base(COLS["Notes"]); f = {}
+    c["model_type"] = "account"; c["type"] = "note"
+    c["contents"] = txt
+    c["is_pinned"] = "No"; c["visible_to_clients"] = "No"
+    rows_nt.append(c); fl_nt.append(f)
+    nt_refs.append(cuid); nt_src.append("14 - Employment History")
+
+# ---------------------------------------------------------------- workbook (dynamic)
+RED = PatternFill("solid", start_color="F4CCCC", end_color="F4CCCC")
+AMBER = PatternFill("solid", start_color="FCE5CD", end_color="FCE5CD")
+GREY = PatternFill("solid", start_color="EFEFEF", end_color="EFEFEF")
+GREYH = PatternFill("solid", start_color="D9D9D9", end_color="D9D9D9")
+BLUE = PatternFill("solid", start_color="DEEBF7", end_color="DEEBF7")
+BLUEH = PatternFill("solid", start_color="9DC3E6", end_color="9DC3E6")
+GREEN = PatternFill("solid", start_color="D6E9CE", end_color="D6E9CE")
+NAVY = PatternFill("solid", start_color="020849", end_color="020849")
+HEADFONT = Font(bold=True, color="FFFFFF", name="Arial", size=10)
+BODY = Font(name="Arial", size=10)
+THIN = Border(bottom=Side(style="thin", color="CCCCCC"))
+TITLEF = Font(bold=True, size=14, name="Arial", color="020849")
+H2F = Font(bold=True, size=11, name="Arial", color="020849")
+SMALL = Font(name="Arial", size=9, color="555555")
+
+wb = Workbook()
+wb.remove(wb.active)
+
+# review cadence per client ref (person sheet only; blank for business/trust)
+CADENCE_BY_REF = {}
+for _, r in P.iterrows():
+    CADENCE_BY_REF[s(r["client_uuid"])] = REVIEW_CADENCE.get(s(r["classification"]), "")
+
+# ---- requirement rules per tab (drive live red highlight + counts) -------------
+# kinds: plain | type_indiv | type_entity | if_value(other,vals) | marker(name)
+REQ = {
+    "Clients": [("client_regulatory_classification", "plain"),
+                ("first_name", "type_indiv"), ("last_name", "type_indiv"),
+                ("entity_name", "type_entity"), ("owners", "type_entity")],
+    "Plans": [("type", "plain"), ("sub_type", "plain"), ("status", "plain"),
+              ("policy_number", "contains_sep")],
+    "Valuations": [("value", "plain")],
+    "Premiums": [],
+    "Charges": [],
+    "Income & Employment": [("name", "plain"), ("type", "plain"), ("amount", "plain"),
+                            ("amount_type", "plain"), ("frequency", "plain"),
+                            ("type_other", "if_value", ("type", ("Other",))),
+                            ("employment_job_title", "if_value", ("type", ("Salary", "Dividend", "Bonus", "Benefit"))),
+                            ("employment_status", "if_value", ("type", ("Salary", "Dividend", "Bonus", "Benefit")))],
+    "Expenses": [("expense_name", "plain"), ("amount", "plain"),
+                 ("life_stage_section_name", "plain")],
+    "Notes": [],
+}
+
+DROPDOWNS = {
+    "Clients": {
+        "client_regulatory_classification": ",".join(ref_list("RegulatoryClassification", "Regulatory Classification",
+            ["Retail Client", "Professional Client", "Eligible Counterparty", "Not Applicable", "Unknown"])),
+        "gender": ",".join(ref_list("Gender", "gender",
+            ["Female", "Male", "Non-binary", "Transgender", "Intersex", "Other", "Unknown"])),
+        "marital_status": ",".join(ref_list("MaritalStatus", "marital_status",
+            ["Single", "Cohabiting", "Married", "Divorced", "Civil Partnership", "Dissolved Civil Partnership",
+             "Widowed", "Separated", "Engaged", "In Relationship", "Unknown"])),
+        "smoker_status": ",".join(ref_list("SmokerStatus", "smoker_status",
+            ["non-smoker", "smoker", "vaper", "ex-smoker"])),
+        "current_state_of_health": ",".join(ref_list("StateOfHealth", "current_state_of_health",
+            ["excellent", "good", "fair", "poor"])),
+    },
+    "Plans": {
+        "status": ",".join(ref_list("PlanStatus", "status", ["Active", "Proposed", "Inactive"])),
+        "type": ",".join(ref_list("PlanTypeSubType", "ParentTypeValue",
+            ["cash_account", "investment", "protection_policy", "pension", "annuity", "general_insurance",
+             "group_protection", "mortgage", "equity_release", "loan_credit", "fixed_asset"])),
+    },
+    "Valuations": {},
+    "Premiums": {
+        "source": "Employee,Employer",
+        "payment_method": "Salary Sacrifice,Salary Deduction,Direct Debit,Standing Order,Cheque,Bank Transfer",
+        "frequency": ",".join(ref_list("PremiumFrequency", "Frequency",
+            ["Daily", "Weekly", "Fortnightly", "Four Weekly", "Monthly", "Bimonthly", "Quarterly",
+             "Biannually", "Annually", "Yearly", "Adhoc", "One Off"])),
+    },
+    "Charges": {
+        "payment_origin": "Client,Provider",
+        "frequency": ",".join(ref_list("ChargeFrequency", "Frequency",
+            ["Daily", "Weekly", "Fortnightly", "Four Weekly", "Monthly", "Bimonthly", "Quarterly",
+             "Biannually", "Annually", "Yearly"])),
+    },
+    "Income & Employment": {
+        "amount_type": "Gross,Net",
+        "type": "Salary,Dividend,Pension,Bonus,Benefit,Investment income,Rental income,Other",
+        "frequency": "Daily,Weekly,Fortnightly,Four Weekly,Monthly,Bimonthly,Quarterly,Biannually,Annually,Adhoc,One off",
+        "employment_status": "Employed,Self Employed,Unemployed,Student,Retired,House person",
+    },
+    "Expenses": {"life_stage_section_name": "Essential,Lifestyle,Discretionary"},
+    "Notes": {},
+}
+
+
+def _blank(cl, r):
+    return 'LEN(TRIM(' + cl + str(r) + '&""))=0'
+
+
+def _pred(rule, colmap, r):
+    """Excel boolean: TRUE when this cell is required-but-missing for row r."""
+    col, kind = rule[0], rule[1]
+    cl = colmap[col]
+    b = _blank(cl, r)
+    if kind == "plain":
+        return b
+    if kind == "type_indiv":
+        tc = colmap["type"]
+        return 'AND($' + tc + str(r) + '="individual",' + b + ')'
+    if kind == "type_entity":
+        tc = colmap["type"]
+        return 'AND(OR($' + tc + str(r) + '="business",$' + tc + str(r) + '="trust"),' + b + ')'
+    if kind == "if_value":
+        other, vals = rule[2]
+        oc = colmap[other]
+        ors = "OR(" + ",".join('$' + oc + str(r) + '="' + v + '"' for v in vals) + ")"
+        return 'AND(' + ors + ',' + b + ')'
+    if kind == "marker":
+        mc = colmap[rule[2][0]]
+        return 'AND($' + mc + str(r) + '=1,' + b + ')'
+    if kind == "contains_sep":
+        return 'ISNUMBER(SEARCH("|",' + cl + str(r) + '))'
+    return b
+
+
+def _miss_formula(req, colmap, r):
+    if not req:
+        return "=0"
+    return "=" + "+".join('(' + _pred(rule, colmap, r) + ')*1' for rule in req)
+
+
+def write_tab(name, cols, rows, flags, helpers, helper_rows, firm,
+              req=None, markers=None, dropdowns=None, src_after=None):
+    req = req or []
+    markers = markers or {}
+    dropdowns = dropdowns or {}
+    src_after = src_after or {}
+    ws = wb.create_sheet(name[:31])
+    helper_set = set(helpers)
+    mk_names = list(markers.keys())
+    # interleave source-reference columns after their mapped field
+    layout = []   # (header, role, src_values_or_None)  role in {data, src}
+    for col in cols:
+        layout.append((col, "data", None))
+        if col in src_after:
+            spec = src_after[col]
+            items = spec if isinstance(spec, list) else [spec]
+            for sh, svals in items:
+                layout.append((sh, "src", svals))
+    headers = [h for h, _, _ in layout]
+    allcols = headers + helpers + mk_names + ["_miss"]
+    colmap = {c: get_column_letter(j) for j, c in enumerate(allcols, 1)}
+    n = len(rows)
+    last = n + 1 if n else 1
+    SRCH = Font(bold=True, size=9, color="1F4E79")
+    SRCB = Font(name="Arial", size=9, color="1F4E79", italic=True)
+    for j, col in enumerate(allcols, 1):
+        cell = ws.cell(1, j, col)
+        cell.alignment = Alignment(vertical="center")
+        role = layout[j - 1][1] if j - 1 < len(layout) else None
+        if col == "_miss" or col in mk_names:
+            cell.font = Font(bold=True, size=8, color="AAAAAA", name="Arial"); cell.fill = GREY
+        elif role == "src":
+            cell.font = SRCH; cell.fill = BLUE
+        elif col.startswith("x_") or col in helper_set:
+            cell.font = HEADFONT; cell.fill = BLUEH
+        elif col in firm:
+            cell.font = Font(bold=True, color="333333", name="Arial", size=10); cell.fill = GREYH
+        else:
+            cell.font = HEADFONT; cell.fill = NAVY
+    amber_count = 0
+    for i, (row, fl) in enumerate(zip(rows, flags), 2):
+        for j, (header, role, svals) in enumerate(layout, 1):
+            if role == "data":
+                v = row.get(header, "")
+                cell = ws.cell(i, j, v if v != "" else None)
+                cell.font = BODY; cell.border = THIN
+                if fl.get(header) == "AMBER":
+                    cell.fill = AMBER; amber_count += 1
+                elif header in firm:
+                    cell.fill = GREY
+            else:  # src reference
+                sv = svals[i - 2] if i - 2 < len(svals) else ""
+                cell = ws.cell(i, j, sv if sv else None)
+                cell.font = SRCB; cell.fill = BLUE; cell.border = THIN
+        base_j = len(layout)
+        for k, hv in enumerate(helper_rows[i - 2], 1):
+            cell = ws.cell(i, base_j + k, hv if hv else None)
+            cell.font = Font(name="Arial", size=9, color="1F4E79"); cell.fill = BLUE; cell.border = THIN
+        for k, mk in enumerate(mk_names, 1):
+            ws.cell(i, base_j + len(helpers) + k, markers[mk][i - 2])
+        ws.cell(i, len(allcols), value=_miss_formula(req, colmap, i))
+    if n:
+        for rule in req:
+            if rule[0] not in colmap:
+                continue
+            cl = colmap[rule[0]]
+            ws.conditional_formatting.add(cl + "2:" + cl + str(last),
+                                          FormulaRule(formula=[_pred(rule, colmap, 2)], fill=RED))
+        for col, opts in dropdowns.items():
+            if col not in colmap:
+                continue
+            dv = DataValidation(type="list", formula1='"' + opts + '"', allow_blank=True)
+            ws.add_data_validation(dv)
+            dv.add(colmap[col] + "2:" + colmap[col] + str(last))
+    ws.freeze_panes = "A2"
+    vis = len(layout) + len(helpers)
+    ws.auto_filter.ref = "A1:" + get_column_letter(vis) + str(max(last, 1))
+    for j, col in enumerate(allcols, 1):
+        ws.column_dimensions[get_column_letter(j)].width = max(12, min(40, len(str(col)) + 4))
+    for k in range(vis + 1, len(allcols) + 1):
+        ws.column_dimensions[get_column_letter(k)].hidden = True
+    return {"name": name, "sheet": name[:31], "miss": colmap["_miss"],
+            "last": last, "rows": n, "amber": amber_count}
+
+# ---------------------------------------------------------------- linkage lookups (for blue helper columns)
+def _client_display(c):
+    return (s(c.get("entity_name")) or
+            " ".join(x for x in [s(c.get("first_name")), s(c.get("middle_name")), s(c.get("last_name"))] if x)).strip()
+
+CLIENT_NAME = {}
+for _i in range(len(rows_clients)):
+    _ref = client_refs[_i]
+    if _ref and _ref not in CLIENT_NAME:
+        CLIENT_NAME[_ref] = _client_display(rows_clients[_i])
+
+def names_for(refs_str, sep="|"):
+    """Map a separated list of source client UUIDs to their display names."""
+    out = []
+    for r in str(refs_str).split(sep):
+        r = r.strip()
+        if r:
+            out.append(CLIENT_NAME.get(r, r))
+    return " & ".join(out)
+
+PLAN_INFO = {}
+for _i in range(len(rows_plans)):
+    _owners = [o.strip() for o in str(rows_plans[_i].get("client_uuids", "")).split(",") if o.strip()]
+    _onames = " & ".join(CLIENT_NAME.get(o, "") for o in _owners if CLIENT_NAME.get(o, ""))
+    if not _onames:
+        _onames = plan_owner_names[_i]
+    PLAN_INFO[plan_refs[_i]] = {
+        "name": rows_plans[_i].get("name", ""),
+        "type": rows_plans[_i].get("type", ""),
+        "sub_type": rows_plans[_i].get("sub_type", ""),
+        "provider": rows_plans[_i].get("provider", ""),
+        "policy_number": rows_plans[_i].get("policy_number", ""),
+        "owner_names": _onames,
+        "owner_refs": ", ".join(_owners),
+    }
+
+# Valuations link to a plan by policy number (column C). Pull it from the plan it belongs to.
+for _i in range(len(rows_val)):
+    _pi = PLAN_INFO.get(val_refs[_i][0], {})
+    if _pi.get("type") == "fixed_asset":
+        continue   # property valuations link by plan, not a policy number
+    _pn = _pi.get("policy_number", "")
+    rows_val[_i]["policy_number"] = _pn
+    if (not _pn) or _pn == "unknown" or "|" in str(_pn):
+        fl_val[_i]["policy_number"] = "AMBER"
+
+
+def plan_idy(refs):
+    """src_after spec: plan + owner identity columns for a list of source plan refs."""
+    g = lambda k: [PLAN_INFO.get(r, {}).get(k, "") for r in refs]
+    return [("x_plan_ref", list(refs)), ("x_plan_name", g("name")), ("x_plan_type", g("type")),
+            ("x_plan_sub_type", g("sub_type")), ("x_provider", g("provider")),
+            ("x_client_names", g("owner_names")), ("x_client_refs", g("owner_refs"))]
+
+
+def client_idy(refs):
+    """src_after spec: client name + source UUID for a list of (possibly pipe-joined) refs."""
+    return [("x_client_ref", list(refs)), ("x_client_name", [names_for(r) for r in refs])]
+
+
+def plan_cols(plan_ref):
+    """Return [name, type, sub_type, provider, owner_names, owner_refs] for a source plan ref."""
+    pi = PLAN_INFO.get(plan_ref, {})
+    return [pi.get("name", ""), pi.get("type", ""), pi.get("sub_type", ""),
+            pi.get("provider", ""), pi.get("owner_names", ""), pi.get("owner_refs", "")]
+
+# ---------------------------------------------------------------- static text blocks
+MAPPING = [
+    ("Clients", "type", "01/02/03 sheet", "individual / business / trust by source sheet"),
+    ("Clients", "first_name / middle_name", "01.forename", "split on first space"),
+    ("Clients", "last_name / entity_name", "01.surname / 02.business_name / 03.client_name", ""),
+    ("Clients", "nickname", "01.preferred_name", "known-as column"),
+    ("Clients", "gender", "01.sex", "direct (confirm)"),
+    ("Clients", "ni_number", "01.national_insurance_number", "spaces stripped, uppercased; non-standard flagged amber"),
+    ("Clients", "marital_status", "01.marital_status", "carried as-is (all values valid in Plannr)"),
+    ("Clients", "smoker_status", "01.smokes_tobacco + vapes", "1=smoker; vapes=vaper; 0=non-smoker"),
+    ("Clients", "current_state_of_health", "01.in_good_health", "1=good; 0 flagged amber (set fair/poor)"),
+    ("Clients", "phone", "01 home>work landline", "mobile is NOT importable -> x_mobile_via_api (API load)"),
+    ("Clients", "owners", "02.primary_contact_uuid (business) / (none for trust)", "individual owner; business pre-filled (source UUID), trust red - supply"),
+    ("Clients", "has_power_of_attorney / power_of_attorney_notes", "15 POA", "col C (scope) + ', ' + col E (attorneys); has_power_of_attorney set yes"),
+    ("Clients", "client_regulatory_classification", "NOT in export", "AR to supply (red). NB 01.classification is review cadence, see x_review_cadence"),
+    ("Clients", "x_review_cadence", "01.classification", "1=6mo, 2=12mo, 3=24mo(legacy), 4=none (reference only)"),
+    ("Clients", "externalreference", "01.client_uuid", "source UUID -> Plannr custom field 'externalreference' (model_type client)"),
+    ("Clients", "address_*", "12 Address History (current)", "latest current address"),
+    ("Clients", "has_will / will_*", "16 Wills (Current)", "executors, last reviewed; set-up date & beneficiaries to will_notes"),
+    ("Clients", "is_vulnerable / vulnerability_*", "11 Vulnerability (latest)", "inferred from indicators (confirm)"),
+    ("Clients", "checked_sanctions_at", "19 AML (latest date_performed)", "AML date used (confirm)"),
+    ("Clients", "previous_review_date / next_review_date", "07 Reviews (latest)", "next = previous + 1 year (amber). Tags not used."),
+    ("Plans", "client_uuids", "04 client_1/2_uuid; 18 owner_uuids", "SOURCE refs (remapped). 'owner name(s) [source]' shows who owns it"),
+    ("Plans", "client_ownership_percentage", "derived", "one owner = 100; two or more = equal split (e.g. 50,50) - confirm"),
+    ("Plans", "type / sub_type", "04.product", "mapped per product table below; 'product [source]' shows original; sub_type checked against importer list"),
+    ("Plans", "policy_number", "04.policy_numbers / 18.mortgage_reference", "missing -> 'unknown' (amber), except fixed assets; multiple numbers flagged red"),
+    ("Plans", "name", "04.product_specific_name else product", ""),
+    ("Plans", "provider / provider_uuid", "04.primary_provider", "matched to Plannr provider directory; exact match sets provider_uuid, else amber + suggestions"),
+    ("Plans", "opened_at", "04.date_of_sale > date_of_transfer > 01-01-2026", "all amber - AR to approve (source in x_flags)"),
+    ("Plans", "agency_in_your_name / under_advice", "04 + ongoing fee", "set yes where an ongoing fee exists; agency_from = plan start date"),
+    ("Plans", "DB pensions", "05", "pension / Defined Benefit Pension; full pension -> projected income; tax_free_cash -> tax-free amount"),
+    ("Plans", "fixed assets / mortgages", "18 Property", "one fixed_asset per property; mortgage row where has_current_mortgage=Yes"),
+    ("Plans", "externalreference", "04.policy_uuid / 05 / 18 uuid", "source UUID -> Plannr custom field 'externalreference' (model_type plan)"),
+    ("Valuations", "value", "18.current_value + 04.contribution", "active property values + policy contribution (confirm contribution is current value)"),
+    ("Valuations", "valuation_date", "go-live 26-06-2026", "defaulted (amber) - confirm"),
+    ("Charges", "rows", "04 ongoing_service_charge_*", "Fee / ongoing_fee / Ongoing; monthly unless quarterly; percentage is the annual figure; start_date = go-live"),
+    ("Income & Employment", "income rows", "21 Income & Expenditure (income)", "type inferred; Monthly; amount_type Gross/Net red; is_taxable yes unless 'Other Income - Non-Taxable'"),
+    ("Income & Employment", "salary rows", "14 employment (current employed/self-employed)", "type Salary; amount + gross/net red; job title from col F, 'unknown' (amber) where blank"),
+    ("Income & Employment", "(other employment)", "14 employment (past / non-earning)", "no income route -> written to Notes"),
+    ("Expenses", "rows", "21 Income & Expenditure (expenditure)", "is_custom_expense yes; zero lines dropped; amounts over 1500 flagged (could be annual); monthly"),
+    ("Notes", "rows", "23 contact log, 24 circumstances, 21 needs, 07 reviews, 14 employment history", "model_type account; created_at from source dates"),
+]
+
+GUIDE = [
+    ("Clients",
+     ["client_regulatory_classification - required for every client. Values: Retail Client, Professional Client, Eligible Counterparty, Not Applicable, Unknown.",
+      "  (The export 'classification' is a review-cadence code, shown for context in x_review_cadence - it is NOT the regulatory classification.)",
+      "first_name / last_name - required for individuals (already filled from the export; red only if missing).",
+      "entity_name - required for Business and Trust clients (already filled).",
+      "owners - Business and Trust clients need an individual client as owner. Business: pre-filled from the source primary contact (a source UUID, remapped at import). Trust: blank and red - supply the individual client UUID."],
+     ["gender mapped from the export 'sex' field - confirm.",
+      "marital status carried across as-is (all values are valid in Plannr) - confirm.",
+      "smoker status and state of health derived from the source yes/no flags - confirm; set state of health to fair/poor where 'not in good health'.",
+      "vulnerability flag and sub-type inferred from indicators - confirm.",
+      "power of attorney pulled from sheet 15 (scope + attorneys merged into power_of_attorney_notes) - confirm.",
+      "next_review_date set to one year after the previous review date - confirm. Tags are not carried (not used).",
+      "AML date used as the sanctions-check date - confirm.",
+      "NI numbers not in the standard format are highlighted - check.",
+      "phone holds the landline only. Mobile numbers cannot be loaded by the importer - they are in x_mobile_via_api and load by API.",
+      "externalreference holds the source client UUID and imports into the Plannr 'externalreference' custom field. Leave it as-is."]),
+    ("Plans",
+     ["type / sub_type - blank where the source product had no Plannr mapping (e.g. 'Fee (no product)', 'CAP ADJUSTMENT'). Map to a type/sub_type or remove the row.",
+      "  Plan types: cash_account, investment, protection_policy, pension, annuity, general_insurance, group_protection, mortgage, equity_release, loan_credit, fixed_asset. Sub-types: see the Plans Dropdowns sheet in the Plannr template.",
+      "  Mapped sub-types are checked against the Plannr importer list; any not recognised for their type are flagged amber.",
+      "policy_number - where the source held more than one number (e.g. 'A | B | C') the cell is red. Valuation feeds need ONE exact number - delete the others, leaving the matching policy number.",
+      "  Missing numbers default to 'unknown' (amber) for everything except fixed assets - replace with the real number. Fixed assets (property) need no policy number."],
+     ["status defaulted to Active - confirm.",
+      "client_uuids / ownership: owners are the SOURCE CRM UUIDs (remapped at import). 'owner name(s) [source]' shows who the plan belongs to. One owner = 100%; two or more = an equal split (e.g. 50,50) - confirm.",
+      "opened_at = date_of_sale, else date_of_transfer, else 01-01-2026 - approve the start date (source shown in x_flags).",
+      "agency_in_your_name and under_advice are set to yes for any plan carrying an ongoing fee; agency_in_your_name_from defaults to the plan start date - confirm.",
+      "provider matched to the Plannr directory: an exact match fills provider_uuid; otherwise the name is amber with the closest directory entries suggested in x_flags - pick the right one.",
+      "DB pensions: scheme name used as provider - confirm administrator; reduced pension is noted in x_flags only (no Plannr field).",
+      "externalreference holds the source plan UUID and imports straight into the Plannr 'externalreference' custom field. Leave it as-is."]),
+    ("Valuations",
+     ["value - required. Property current value and (where present) the policy 'contribution' figure are carried across; red only if missing."],
+     ["valuation_date defaulted to the go-live date (26-06-2026) - confirm.",
+      "Rows built from policy 'contribution' are flagged: confirm this is a current value, not total contributions paid. See x_note.",
+      "The blue columns identify the plan each valuation belongs to (source plan UUID, name, type, sub_type, provider) and its owner client(s) by name and source UUID."]),
+    ("Charges",
+     ["Nothing is required. fee, percentage and frequency are filled."],
+     ["payer mapped: client -> Client; provider / platform / DFM -> Provider - confirm.",
+      "frequency assumed Monthly unless the source said quarterly; the percentage is the annual figure.",
+      "VAT mapped to tax_exempt - confirm. start_date set to the go-live date (26-06-2026) - confirm.",
+      "The blue columns identify the plan each charge belongs to (source plan UUID, name, type, sub_type, provider) and its owner client(s) by name and source UUID."]),
+    ("Income & Employment",
+     ["IMPORTANT - every income amount is an ANNUAL figure from the source. The script does NOT alter amounts; convert each to a MONTHLY figure before import and set frequency to Monthly.",
+      "amount_type - defaulted to Gross (amber). Change any that are Net.",
+      "amount - enter where blank (e.g. current-employment salary).",
+      "name / type - already filled. frequency is set to Annually to match the source; change to Monthly once the amounts are monthly.",
+      "employment_status - required when income type is Salary, Dividend, Bonus or Benefit. If a 'Dividend' line is investment income, change its type to 'Investment income' to clear it.",
+      "type_other - required only when type = Other."],
+     ["is_taxable assumed yes for all income, except where type_other is 'Other Income - Non-Taxable' (set no) - confirm.",
+      "employment_job_title taken from sheet 14 column F for current employment; set to 'unknown' (amber) where the source had none.",
+      "Past employment and non-earning current roles are not income lines, so they are written to Notes instead of here.",
+      "The blue columns show which client each line belongs to, by name and source UUID."]),
+    ("Expenses",
+     ["IMPORTANT - every expenditure amount is an ANNUAL figure from the source. The script does NOT alter amounts; convert each to MONTHLY before import.",
+      "IMPORTANT - any JOINT expenditure (a line with two owners, flagged amber) will be split EQUALLY across the joint clients unless you tell us otherwise.",
+      "life_stage_section_name - blank where the section could not be inferred from the name. Set Essential, Lifestyle or Discretionary.",
+      "amount - enter where blank."],
+     ["is_custom_expense is set to yes (the source keeps its own expense names rather than Plannr's standard categories).",
+      "zero-value lines are dropped.",
+      "each expense keeps its original name and is mapped to one of your three Plannr sections (Essential / Lifestyle / Discretionary) where possible; where it genuinely cannot be placed the section is blank and red. Life stage set to 'Current Lifestyle'.",
+      "The blue columns show which client each expense belongs to, by name and source UUID."]),
+    ("Notes",
+     ["Nothing to complete."],
+     ["Built from contact log, circumstances & goals, needs & objectives, reviews, and employment history.",
+      "The blue columns show which client each note belongs to, by name and source UUID."]),
+]
+
+CONFIRMS = [
+    "Plan start dates approved (date_of_sale / date_of_transfer / 01-01-2026 fallback)",
+    "Plan ownership splits confirmed (one owner = 100%, joint = equal split)",
+    "Multiple-policy-number plans reduced to the single feed-matching number",
+    "Missing policy numbers ('unknown') replaced with the real number",
+    "Provider matches confirmed; unmatched names resolved",
+    "Ongoing-fee plans: agency in your name / under advice = yes is correct",
+    "Valuations confirmed (contribution figures are current values, date = go-live)",
+    "Income Gross/Net set; is_taxable assumptions confirmed",
+    "Expenses: section set; figures over 1500 confirmed as monthly",
+    "Business/Trust owners set to an individual client",
+    "Power of attorney and next review date (previous + 1 year) confirmed",
+    "Charge / valuation go-live date (26-06-2026) confirmed; mobiles to load via API",
+]
+
+QUESTIONS = [
+    "DB Pension primary owner: 05.client_1_uuid does not match the client master (client_2_uuid does). Confirm the correct primary owner.",
+    "Orphan owner references: some plan owner UUIDs have no client record in this export (see each plan's x_flags). Confirm the missing clients.",
+    "Multiple policy numbers: many plans carry several numbers in one field (A | B | C). Supply the single number each valuation feed must match.",
+    "Policy 'contribution': used as a current valuation here. Confirm it is a current value and not total contributions paid.",
+    "Plan start dates: not supplied; derived from date_of_sale / date_of_transfer with 01-01-2026 fallback. Confirm or supply true start dates.",
+    "Property addresses & mortgage references: sheet 18 address, postcode and mortgage_reference are empty for every row. Supply if held elsewhere.",
+    "Trust owners: trusts carry no individual owner in the source. Supply the individual client for each trust.",
+    "Provider matching: exact names matched to the Plannr directory; unmatched names are amber with the closest entries suggested - pick the right one.",
+    "Premiums are not in this pack (no source/method/start dates). The AR keys recurring premiums manually after import.",
+]
+
+
+def _pick(lst, idxs):
+    return [lst[i] for i in idxs]
+
+
+def build_book(out_path, title, keep):
+    global wb, metas, META
+    wb = Workbook()
+    wb.remove(wb.active)
+    metas = []
+    ci = keep["Clients"]
+    metas.append(write_tab("Clients", COLS["Clients"], _pick(rows_clients, ci), _pick(fl_clients, ci),
+                           ["externalreference", "x_review_cadence", "x_mobile_via_api", "x_flags"],
+                           [[client_refs[i], CADENCE_BY_REF.get(client_refs[i], ""),
+                             mobile_by_ref.get(client_refs[i], ""), flags_text[i]] for i in ci],
+                           FIRM["Clients"], REQ["Clients"], {}, DROPDOWNS["Clients"]))
+    pi = keep["Plans"]
+    metas.append(write_tab("Plans", COLS["Plans"], _pick(rows_plans, pi), _pick(fl_plans, pi),
+                           ["externalreference", "x_source", "x_flags"],
+                           [[plan_refs[i], plan_src[i], plan_flags[i]] for i in pi],
+                           FIRM["Plans"], REQ["Plans"], {}, DROPDOWNS["Plans"],
+                           src_after={"client_uuids": ("owner name(s) [source]", _pick(plan_owner_names, pi)),
+                                      "sub_type": ("product [source]", _pick(plan_product_src, pi))}))
+    vi = keep["Valuations"]
+    metas.append(write_tab("Valuations", COLS["Valuations"], _pick(rows_val, vi), _pick(fl_val, vi),
+                           ["x_plan_ref", "x_plan_name", "x_plan_type", "x_plan_sub_type", "x_provider",
+                            "x_client_names", "x_client_refs", "x_note"],
+                           [[val_refs[i][0]] + plan_cols(val_refs[i][0]) + [val_notes[i]] for i in vi],
+                           FIRM["Valuations"], REQ["Valuations"], {}, DROPDOWNS["Valuations"]))
+    gi = keep["Charges"]
+    metas.append(write_tab("Charges", COLS["Charges"], _pick(rows_chg, gi), _pick(fl_chg, gi),
+                           ["x_flags"],
+                           [[chg_refs[i][1]] for i in gi],
+                           FIRM["Charges"], REQ["Charges"], {}, DROPDOWNS["Charges"],
+                           src_after={"adviser_uuid": plan_idy([chg_refs[i][0] for i in gi])}))
+    ii = keep["Income & Employment"]
+    metas.append(write_tab("Income & Employment", COLS["Income & Employment"], _pick(rows_ie, ii), _pick(fl_ie, ii),
+                           ["x_note"],
+                           [[ie_notes[i]] for i in ii],
+                           FIRM["Income & Employment"], REQ["Income & Employment"], {}, DROPDOWNS["Income & Employment"],
+                           src_after={"client_uuid": client_idy([ie_refs[i] for i in ii])}))
+    xi = keep["Expenses"]
+    metas.append(write_tab("Expenses", COLS["Expenses"], _pick(rows_exp, xi), _pick(fl_exp, xi),
+                           ["x_note"],
+                           [[exp_notes[i]] for i in xi],
+                           FIRM["Expenses"], REQ["Expenses"], {}, DROPDOWNS["Expenses"],
+                           src_after={"client_uuid": client_idy([exp_refs[i] for i in xi])}))
+    ni = keep["Notes"]
+    metas.append(write_tab("Notes", COLS["Notes"], _pick(rows_nt, ni), _pick(fl_nt, ni),
+                           ["x_client_ref", "x_client_name", "x_source"],
+                           [[nt_refs[i], names_for(nt_refs[i]), nt_src[i]] for i in ni],
+                           FIRM["Notes"], REQ["Notes"], {}, DROPDOWNS["Notes"]))
+    META = {m["name"]: m for m in metas}
+
+    # field mapping
+    mp = wb.create_sheet("Field Mapping")
+    mp.sheet_view.showGridLines = False
+    mp.append(["Tab", "Plannr column", "Source", "Transform / default"])
+    for c in mp[1]:
+        c.font = HEADFONT
+        c.fill = NAVY
+    for row in MAPPING:
+        mp.append(row)
+    mp.append([])
+    mp.append(["Product mapping (04.product -> Plannr)", "", "", ""])
+    mp.cell(row=mp.max_row, column=1).font = Font(bold=True, name="Arial")
+    mp.append(["Ceding product", "Plannr type", "Plannr sub_type", "Note"])
+    for c in mp[mp.max_row]:
+        c.font = Font(bold=True, name="Arial", size=10)
+    for p in sorted(PM):
+        t, sub, n2 = PM[p]
+        mp.append([p, t, sub, n2 or ""])
+    for p in sorted(NON_PLANS):
+        mp.append([p, "(blank)", "(blank)", "Not a plan - map or remove the row (red in Plans)"])
+    for col, w in zip("ABCD", (46, 26, 42, 70)):
+        mp.column_dimensions[col].width = w
+    for rowcells in mp.iter_rows(min_row=2):
+        for c in rowcells:
+            if c.font is None or not c.font.bold:
+                c.font = Font(name="Arial", size=10)
+
+    # guide
+    gd = wb.create_sheet("Guide", 0)
+    gd.sheet_view.showGridLines = False
+    gr = 1
+    gd.cell(gr, 1, "HOW TO COMPLETE EACH SHEET").font = TITLEF
+    gr += 2
+    for tab, reds, ambers in GUIDE:
+        if tab not in META:
+            continue
+        m = META.get(tab, {})
+        gd.cell(gr, 1, tab + "  (" + str(m.get("rows", 0)) + " rows)").font = H2F
+        gr += 1
+        gd.cell(gr, 1, "RED - must complete:").font = Font(bold=True, name="Arial", size=10, color="9C0006")
+        gr += 1
+        for ln in reds:
+            gd.cell(gr, 1, ln).font = BODY
+            gr += 1
+        gd.cell(gr, 1, "AMBER - confirm or correct:").font = Font(bold=True, name="Arial", size=10, color="9C6500")
+        gr += 1
+        for ln in ambers:
+            gd.cell(gr, 1, ln).font = BODY
+            gr += 1
+        gr += 1
+    gd.column_dimensions["A"].width = 140
+
+    # dashboard
+    dash = wb.create_sheet("START HERE", 0)
+    dash.sheet_view.showGridLines = False
+    R = 1
+    dash.cell(R, 1, title).font = TITLEF
+    R += 1
+    dash.cell(R, 1, "Work through the coloured cells on each tab. The counts below update live as you fill them in.").font = SMALL
+    R += 2
+    dash.cell(R, 1, "KEY").font = H2F
+    R += 1
+    for label, fill in [("RED - required for import, missing. Please complete.", RED),
+                        ("AMBER - we assumed or derived this, or it is optional. Confirm or correct.", AMBER),
+                        ("GREY - Beyond populates (system, adviser, ownership links). Please ignore.", GREY),
+                        ("BLUE columns - read-only context for you: source client/plan UUIDs, client and plan names, provider and plan type, and the externalreference migration key. Do not edit or delete.", BLUE)]:
+        sw = dash.cell(R, 1, " ")
+        sw.fill = fill
+        dash.cell(R, 2, label).font = BODY
+        R += 1
+    R += 1
+    dash.cell(R, 1, "PROGRESS (live)").font = H2F
+    R += 1
+    for j, h in enumerate(["Section", "Fields to complete", "Rows needing attention", "Assumptions to confirm"], 1):
+        c = dash.cell(R, j, h)
+        c.font = HEADFONT
+        c.fill = NAVY
+    R += 1
+    first_data = R
+    for m in metas:
+        dash.cell(R, 1, m["name"]).font = BODY
+        if m["rows"]:
+            rng = "'" + m["sheet"] + "'!" + m["miss"] + "2:" + m["miss"] + str(m["last"])
+            dash.cell(R, 2, "=SUM(" + rng + ")").font = BODY
+            dash.cell(R, 3, '=COUNTIF(' + rng + ',">0")').font = BODY
+        else:
+            dash.cell(R, 2, 0).font = BODY
+            dash.cell(R, 3, 0).font = BODY
+        dash.cell(R, 4, m["amber"]).font = BODY
+        R += 1
+    last_data = R - 1
+    dash.cell(R, 1, "TOTAL").font = Font(bold=True, name="Arial", size=10)
+    dash.cell(R, 2, "=SUM(B" + str(first_data) + ":B" + str(last_data) + ")").font = Font(bold=True, name="Arial", size=11)
+    dash.cell(R, 3, "=SUM(C" + str(first_data) + ":C" + str(last_data) + ")").font = Font(bold=True, name="Arial", size=10)
+    dash.cell(R, 4, "=SUM(D" + str(first_data) + ":D" + str(last_data) + ")").font = Font(bold=True, name="Arial", size=10)
+    tfc = "B" + str(R)
+    dash.conditional_formatting.add(tfc, FormulaRule(formula=[tfc + "=0"], fill=GREEN))
+    dash.conditional_formatting.add(tfc, FormulaRule(formula=[tfc + ">0"], fill=AMBER))
+    R += 2
+    dash.cell(R, 1, "CONFIRMATIONS - tick when reviewed").font = H2F
+    R += 1
+    tally_row = R
+    dash.cell(R, 1, "Confirmed:").font = Font(bold=True, name="Arial", size=10)
+    R += 1
+    conf_first = R
+    dv_yn = DataValidation(type="list", formula1='"Yes,No"', allow_blank=True)
+    dash.add_data_validation(dv_yn)
+    for item in CONFIRMS:
+        dash.cell(R, 1, item).font = BODY
+        a = dash.cell(R, 2, "")
+        a.font = BODY
+        a.fill = AMBER
+        dv_yn.add(a)
+        R += 1
+    conf_last = R - 1
+    dash.cell(tally_row, 2,
+              '=COUNTIF(B' + str(conf_first) + ':B' + str(conf_last) + ',"Yes")&" of "&' + str(len(CONFIRMS))).font = Font(bold=True, name="Arial", size=11)
+    R += 2
+    dash.cell(R, 1, "QUESTIONS FOR THE DATA SOURCE (not AR actions)").font = H2F
+    R += 1
+    for q in QUESTIONS:
+        dash.cell(R, 1, "- " + q).font = BODY
+        R += 1
+    dash.column_dimensions["A"].width = 96
+    for col in ("B", "C", "D"):
+        dash.column_dimensions[col].width = 22
+
+    wb.calculation.fullCalcOnLoad = True
+    wb.save(out_path)
+    return {m["name"]: m["rows"] for m in metas}
+
+
+# ---------------------------------------------------------------- partition: individuals vs business/trust
+biztrust_refs = {client_refs[i] for i, c in enumerate(rows_clients) if c["type"] in ("business", "trust")}
+
+plan_bt = []
+for i in range(len(rows_plans)):
+    owners = [o.strip() for o in str(rows_plans[i].get("client_uuids", "")).split(",") if o.strip()]
+    plan_bt.append(any(o in biztrust_refs for o in owners))
+plan_ref_bt = {plan_refs[i]: plan_bt[i] for i in range(len(rows_plans))}
+
+
+def _split(n, predicate):
+    ind = [i for i in range(n) if not predicate(i)]
+    bt = [i for i in range(n) if predicate(i)]
+    return ind, bt
+
+
+c_ind, c_bt = _split(len(rows_clients), lambda i: rows_clients[i]["type"] in ("business", "trust"))
+p_ind, p_bt = _split(len(rows_plans), lambda i: plan_bt[i])
+v_ind, v_bt = _split(len(rows_val), lambda i: plan_ref_bt.get(val_refs[i][0], False))
+g_ind, g_bt = _split(len(rows_chg), lambda i: plan_ref_bt.get(chg_refs[i][0], False))
+i_ind, i_bt = _split(len(rows_ie), lambda i: any(x.strip() in biztrust_refs for x in str(ie_refs[i]).split("|")))
+x_ind, x_bt = _split(len(rows_exp), lambda i: any(x.strip() in biztrust_refs for x in str(exp_refs[i]).split("|")))
+n_ind, n_bt = _split(len(rows_nt), lambda i: nt_refs[i] in biztrust_refs)
+
+keep_ind = {"Clients": c_ind, "Plans": p_ind, "Valuations": v_ind, "Charges": g_ind,
+            "Income & Employment": i_ind, "Expenses": x_ind, "Notes": n_ind}
+keep_bt = {"Clients": c_bt, "Plans": p_bt, "Valuations": v_bt, "Charges": g_bt,
+           "Income & Employment": i_bt, "Expenses": x_bt, "Notes": n_bt}
+
+r_ind = build_book(OUT, f"{ADVISER.upper()} - PLANNR IMPORT PACK (INDIVIDUALS)", keep_ind)
+print("individuals ->", OUT, r_ind)
+
+if any(keep_bt[t] for t in keep_bt):
+    r_bt = build_book(OUT_BT, f"{ADVISER.upper()} - PLANNR IMPORT PACK (BUSINESS & TRUST)", keep_bt)
+    print("business/trust ->", OUT_BT, r_bt)
+else:
+    print("no business/trust clients - second pack not produced")
+
+print("corrupt persons:", len(corrupt_refs), "| dup refs:", len(set(dup_refs)),
+      "| orphan plan owners:", len(orphan_plan_owners),
+      "| withdrawals skipped:", withdrawal_count,
+      "| employment notes:", len(emp_history_notes))
